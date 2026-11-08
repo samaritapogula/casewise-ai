@@ -226,3 +226,37 @@ def test_gemini_multilingual_risk_flag_escalates(monkeypatch):
     assert data["mode"] == "guided-demo"
     assert "qualified local lawyer" in data["assistant_message"]
     assert data["next_steps"]
+
+
+def test_gemini_followup_uses_selected_bengali_language(monkeypatch):
+    import json
+    from backend import llm
+    monkeypatch.setenv('GEMINI_API_KEY', 'synthetic-test-key')
+    seen = {}
+    class FakeResponse:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def read(self, _):
+            return json.dumps({'candidates':[{'content':{'parts':[{'text':'আপনার কাছে ক্রয়ের রসিদ আছে?'}]}}]}).encode('utf-8')
+    def fake_urlopen(request, timeout):
+        seen['request'] = json.loads(request.data.decode('utf-8'))
+        return FakeResponse()
+    monkeypatch.setattr(llm.urllib.request, 'urlopen', fake_urlopen)
+    analysis = {'summary': {'category_label': 'Consumer complaint & refund', 'missing_details': ['Other party']}, 'assistant_message': 'What evidence do you have?'}
+    answer = llm.conversational_followup(analysis, [{'role':'user','content':'I need a refund'}], 'bn')
+    assert answer == 'আপনার কাছে ক্রয়ের রসিদ আছে?'
+    assert json.loads(seen['request']['contents'][0]['parts'][0]['text'])['response_language'] == 'Bengali'
+
+
+def test_wrong_script_gemini_followup_falls_back(monkeypatch):
+    import json
+    from backend import llm
+    monkeypatch.setenv('GEMINI_API_KEY', 'synthetic-test-key')
+    class FakeResponse:
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def read(self, _):
+            return json.dumps({'candidates':[{'content':{'parts':[{'text':'What proof do you have?'}]}}]}).encode('utf-8')
+    monkeypatch.setattr(llm.urllib.request, 'urlopen', lambda *_args, **_kwargs: FakeResponse())
+    analysis = {'summary': {'category_label': 'Consumer complaint', 'missing_details': ['Evidence']}, 'assistant_message': 'Offline fallback'}
+    assert llm.conversational_followup(analysis, [{'role':'user','content':'I need a refund'}], 'hi') is None

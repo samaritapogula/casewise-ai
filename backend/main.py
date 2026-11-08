@@ -34,9 +34,8 @@ class Request(BaseModel):
     messages: list[Message] = Field(min_length=1, max_length=25)
     category: str = "auto"
     profile: dict[str, str] = Field(default_factory=dict)
-    language: str = Field(default="en", pattern="^(en|hi|te)$")
+    language: str = Field(default="en", pattern="^(en|hi|te|ta|bn|mr)$")
     document_type: str = Field(default="request", pattern="^(request|notice|complaint|reply|application)$")
-    confirmed: bool = False
     confirmed: bool = False  # Explicit user review, required for PDF generation.
 
 
@@ -78,6 +77,8 @@ def analyze_case(request: Request):
         if localized:
             data["next_steps"] = localized
             data["translation_status"] = "AI translation for user review; official sources are unchanged."
+        elif request.language != "en":
+            data["translation_status"] = "Guidance remains in English because a verified translation is unavailable. Do not assume translation was successful."
         if data["needs_lawyer"]:
             answer = data["assistant_message"]
         else:
@@ -102,7 +103,7 @@ def rehearse(request: PracticeRequest):
 @app.post("/api/draft")
 def make_pdf(request: Request):
     try:
-        draft_text = make_draft(as_dict(request), request.profile, request.category, confirmed=request.confirmed)
+        draft_text = make_draft(as_dict(request), request.profile, request.category, confirmed=request.confirmed, document_type=request.document_type)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     result = BytesIO()

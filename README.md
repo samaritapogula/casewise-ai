@@ -9,30 +9,11 @@ CaseWise AI is a **demonstration, not a lawyer**. It never guarantees outcomes, 
 - React chat interface and free-text issue classification (or manual category choice)
 - Fact capture, editable case details, missing-information prompts and next-step guidance
 - Safe source links to India Code, NALSA, NCH, e-Jagriti and Chief Labour Commissioner
-- A downloadable **PDF factual request for resolution** (not a formal legal notice)
+- A downloadable **PDF factual request for resolution**, generated after user fact review and confirmation (not a formal legal notice)
 - Safety alerts for urgent/criminal matters, with document generation blocked in those cases
 - Optional Gemini-assisted **question wording** with a configurable provider and model
 - Fully functional, deterministic **guided-demo** mode without any API key
 - No database / no intentional server-side case persistence
-
-## Quick macOS setup (Gemini key stays on your Mac)
-
-Clone the repository and run the included setup helper:
-
-```bash
-cd ~/Desktop
-git clone https://github.com/samaritapogula/casewise-ai.git
-cd casewise-ai
-bash scripts/setup_mac.sh
-```
-
-The helper installs backend and frontend dependencies and creates `.env` from `.env.example` (without overwriting an existing file). Enter your private Gemini key locally with `nano .env` by replacing the blank value after `GEMINI_API_KEY=`. Then run:
-
-```bash
-bash scripts/run_mac.sh
-```
-
-Open **http://localhost:5173**. Keep the Terminal window open while testing; press Ctrl+C to stop. The app reads the local `.env` file automatically, so no need to paste the key into terminal commands. Never commit `.env` or paste the real key into chat.
 
 ## Run locally
 
@@ -62,7 +43,7 @@ Open **http://localhost:5173**. The Vite development proxy forwards `/api` to th
 
 ### Optional: real LLM-assisted follow-ups
 
-For macOS, the **preferred** way is to put the key in the private `.env` file created by `bash scripts/setup_mac.sh` (edit with `nano .env`). The backend loads this file automatically. Alternatively, you can set environment variables in the backend shell before starting Uvicorn:
+In the backend shell, **before starting Uvicorn**, set an API key using your own free-tier Gemini account:
 
 ```bash
 # macOS / Linux
@@ -77,6 +58,16 @@ $env:GEMINI_MODEL='gemini-2.5-flash'
 No key is required for the guided demo. With a key, user conversation snippets are sent to the external Gemini API. The language model only provides **intake wording**; fixed rules produce case summaries and source-linked next steps. If the API fails, the app falls back gracefully. **Do not put the API key in React/Vite or commit it to GitHub.**
 
 For a separately hosted frontend, set `VITE_API_BASE_URL=https://your-backend-host` in `frontend/.env.local` before building. In the backend configure `CASEWISE_ALLOWED_ORIGINS=https://your-frontend-host`. Hosting the frontend on Vercel does **not** automatically host FastAPI; deploy both services or use a Python-capable host for the backend.
+
+## Reviewed PDF drafting (new)
+
+Once the chatbot has collected case information, click **Review & generate PDF** in Case overview. A review dialog displays a cleaned, editable narrative sourced from the user's own statements (not the AI's questions), plus the six case fields and optional sender details. Confirm or correct the information and tick the explicit review checkbox before generating the PDF.
+
+The server also enforces confirmation and requires the **other party, city/state, relevant event date and requested resolution** (enter "Not known" when a date genuinely cannot be established rather than guessing). The amount and evidence are optional. A draft is still preliminary: it should be checked before sending and is not a formal legal notice.
+
+The `POST /api/draft` endpoint now requires `"confirmed": true` and the required `profile` fields; older direct calls without confirmation return HTTP 422. The PDF generator no longer reproduces conversational requests such as "What should I do?". Manually edited narrative text is supplied as `profile.facts_narrative`.
+
+`outputs/reviewed_draft_test_runs.json` contains **four raw end-to-end sample runs** (one per civil category), including the extracted PDF text. These use fictional inputs and demonstrate program behavior, not legal accuracy.
 
 ## Test the actual backend
 

@@ -111,3 +111,49 @@ def test_draft_pdf_removes_chat_question():
     assert "Full refund of INR 45,000" in pdf_text
     assert "Example Retailer" in pdf_text
     assert "CASEWISE AI" in pdf_text
+
+@pytest.mark.parametrize('kind,expected', [
+    ('request', 'DRAFT REQUEST FOR RESOLUTION'),
+    ('notice', 'DRAFT NOTICE OUTLINE'),
+    ('complaint', 'DRAFT COMPLAINT'),
+    ('reply', 'DRAFT REPLY'),
+    ('application', 'DRAFT APPLICATION'),
+])
+def test_document_types_are_drafts(kind, expected):
+    facts = [{'role':'user', 'content':'I ordered a phone for INR 8000 but the seller did not deliver it.'}]
+    p = {'counterparty':'Example Seller', 'location':'Kanpur', 'event_date':'01 Nov 2026',
+         'desired_resolution':'Deliver the paid item', 'facts_narrative':'I ordered the phone but it has not arrived.'}
+    result = make_draft(facts,p,'consumer',confirmed=True,document_type=kind)
+    assert expected in result and 'formal legal notice' in result.lower()
+    assert 'Example Seller' in result
+
+
+def test_practice_fallback_and_endpoint_no_key(monkeypatch):
+    monkeypatch.delenv('GEMINI_API_KEY', raising=False)
+    from backend.workflow import practice_argument
+    case = analyze([{'role':'user','content':'A seller refused to refund my product.'}])
+    reply = practice_argument(case, 'I have the invoice and email replies.', 'en')
+    assert reply['mode'] == 'guided-demo'
+    assert 'opponent_question' in reply
+    r = client.post('/api/practice', json={
+        'messages':[{'role':'user','content':'A seller refused to refund my product.'}],
+        'language':'hi','argument':'I have the invoice and email replies.'})
+    assert r.status_code == 200 and r.json()['mode'] == 'guided-demo'
+
+
+def test_multilingual_input_supported_with_transparent_fallback(monkeypatch):
+    monkeypatch.delenv('GEMINI_API_KEY', raising=False)
+    r = client.post('/api/analyze', json={
+        'messages':[{'role':'user','content':'मुझे दुकान से रिफंड नहीं मिला है'}], 'language':'hi'})
+    assert r.status_code == 200
+    data = r.json()
+    assert data['language'] == 'hi'
+    assert data['summary']['ai_extracted_case'] is None
+    assert data['mode'] == 'guided-demo'
+
+
+def test_practice_blocks_urgent():
+    r = client.post('/api/practice', json={
+        'messages':[{'role':'user','content':'There is a court summons and hearing tomorrow'}],
+        'argument':'I believe the document has mistakes.'})
+    assert r.status_code == 422

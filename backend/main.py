@@ -33,6 +33,7 @@ class Request(BaseModel):
     messages: list[Message] = Field(min_length=1, max_length=25)
     category: str = "auto"
     profile: dict[str, str] = Field(default_factory=dict)
+    confirmed: bool = False  # Explicit user review, required for PDF generation.
 
 
 def as_dict(request: Request) -> list[dict]:
@@ -65,21 +66,24 @@ def analyze_case(request: Request):
 @app.post("/api/draft")
 def make_pdf(request: Request):
     try:
-        draft_text = make_draft(as_dict(request), request.profile, request.category)
+        draft_text = make_draft(as_dict(request), request.profile, request.category, confirmed=request.confirmed)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     result = BytesIO()
-    doc = SimpleDocTemplate(result, pagesize=A4, topMargin=44, bottomMargin=46, leftMargin=48, rightMargin=48)
+    doc = SimpleDocTemplate(result, pagesize=A4, topMargin=46, bottomMargin=48, leftMargin=54, rightMargin=54)
     styles = getSampleStyleSheet()
-    normal = ParagraphStyle("LetterText", parent=styles["Normal"], fontName="Helvetica", fontSize=9.5, leading=15, spaceAfter=6)
-    header = ParagraphStyle("LetterHeader", parent=normal, fontName="Helvetica-Bold", fontSize=12, leading=17, textColor=colors.HexColor("#102840"), alignment=TA_CENTER)
+    normal = ParagraphStyle("LetterText", parent=styles["Normal"], fontName="Helvetica", fontSize=10, leading=15.5, spaceAfter=7)
+    header = ParagraphStyle("LetterHeader", parent=normal, fontName="Helvetica-Bold", fontSize=13, leading=19, spaceAfter=10, textColor=colors.HexColor("#102840"), alignment=TA_CENTER)
+    caption = ParagraphStyle("LetterCaption", parent=normal, fontSize=8.5, leading=12, textColor=colors.HexColor("#6E7E88"))
+    subject = ParagraphStyle("LetterSubject", parent=normal, fontName="Helvetica-Bold", fontSize=10.5, leading=15, textColor=colors.HexColor("#183F55"))
     story = []
     for index, line in enumerate(draft_text.split("\n")):
         if not line.strip():
             story.append(Spacer(1, 7))
         else:
             # Only escaped user input is ever passed to ReportLab markup.
-            story.append(Paragraph(escape(line.replace("₹", "INR ")).replace("\n", " "), header if index == 0 else normal))
+            chosen_style = header if index == 0 else caption if index == 1 or line.startswith("REVIEW BEFORE") else subject if line.startswith("Subject:") or line == "Requested resolution:" else normal
+            story.append(Paragraph(escape(line.replace("₹", "INR ")).replace("\n", " "), chosen_style))
     doc.build(story)
     result.seek(0)
     return StreamingResponse(result, media_type="application/pdf", headers={"Content-Disposition": 'attachment; filename="casewise-draft-request.pdf"', "Cache-Control": "no-store"})

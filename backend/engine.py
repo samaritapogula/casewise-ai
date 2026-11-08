@@ -152,7 +152,7 @@ def draft_narrative(messages: list[dict[str, str]]) -> str:
 
 
 def make_draft(messages: list[dict[str, str]], profile: dict[str, Any] | None = None,
-               category: str = "auto", *, confirmed: bool = False) -> str:
+               category: str = "auto", *, confirmed: bool = False, document_type: str = "request") -> str:
     """Build a reviewable factual letter, never a formal legal notice.
 
     Both essential details and an explicit review confirmation are validated on
@@ -163,6 +163,9 @@ def make_draft(messages: list[dict[str, str]], profile: dict[str, Any] | None = 
         raise ValueError("Draft generation disabled for potentially urgent or criminal matters; seek a qualified lawyer.")
     if not confirmed:
         raise ValueError("Review the proposed facts and confirm they are accurate before generating a PDF.")
+
+    if document_type not in {"request", "notice", "complaint", "reply", "application"}:
+        raise ValueError("Unsupported document type.")
 
     facts = analysis["profile_used"]
     required = ("counterparty", "location", "event_date", "desired_resolution")
@@ -185,9 +188,17 @@ def make_draft(messages: list[dict[str, str]], profile: dict[str, Any] | None = 
     remedy = facts["desired_resolution"].rstrip(" .")
     category_label = analysis["summary"]["category_label"]
 
+    document_config = {
+        "request": ("DRAFT REQUEST FOR RESOLUTION", "Request for resolution", "I am writing to seek a resolution of the matter described below."),
+        "notice": ("DRAFT NOTICE OUTLINE - LAWYER REVIEW REQUIRED", "Proposed notice requesting resolution", "This is a proposed notice of the matter for review by a qualified lawyer; it does not assert any legal conclusions."),
+        "complaint": ("DRAFT COMPLAINT - CHECK RECIPIENT AND PROCEDURE", "Draft complaint", "I am writing to describe a grievance for the appropriate recipient to review. Please verify the authority and filing process."),
+        "reply": ("DRAFT REPLY - LAWYER REVIEW ADVISED", "Proposed reply regarding dispute", "I am replying to the concerns raised about the matter below. This draft does not admit or deny allegations beyond the facts I have confirmed."),
+        "application": ("DRAFT APPLICATION FOR ASSISTANCE", "Request for assistance", "I am requesting guidance or assistance with the matter described below. Please verify the appropriate office and its application process."),
+    }
+    heading, subject, opening = document_config[document_type]
     lines = [
-        "CASEWISE AI | DRAFT REQUEST FOR RESOLUTION",
-        "For review only - not a formal legal notice or legal advice.",
+        "CASEWISE AI | " + heading,
+        "For review only - not a formal legal notice, official filing or legal advice.",
         "",
         f"From: {sender}",
         f"Contact: {contact}",
@@ -195,11 +206,11 @@ def make_draft(messages: list[dict[str, str]], profile: dict[str, Any] | None = 
         f"City / State: {location}",
         "Date prepared: [Add the date on which you send this letter]",
         "",
-        f"Subject: Request for resolution - {category_label}",
+        f"Subject: {subject} - {category_label}",
         "",
         "Dear Sir/Madam,",
         "",
-        "I am writing to seek a resolution of the matter described below. The following is my account of the events:",
+        opening + " The following is my account of the events:",
         story,
         "",
         f"Relevant event date: {event_date}",
@@ -213,7 +224,7 @@ def make_draft(messages: list[dict[str, str]], profile: dict[str, Any] | None = 
         "Requested resolution:",
         remedy[0].upper() + remedy[1:] + "." if remedy else "[Specify your requested resolution].",
         "",
-        "Please acknowledge this request and respond in writing. I would prefer to resolve the matter amicably and keep a record of our correspondence.",
+        "Please acknowledge this communication in writing. I would prefer an appropriate, peaceful resolution and a written record of correspondence.",
         "",
         "Sincerely,",
         sender,

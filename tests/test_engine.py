@@ -157,3 +157,58 @@ def test_practice_blocks_urgent():
         'messages':[{'role':'user','content':'There is a court summons and hearing tomorrow'}],
         'argument':'I believe the document has mistakes.'})
     assert r.status_code == 422
+
+
+@pytest.mark.parametrize("language", ["en", "hi", "te", "ta", "bn", "mr"])
+def test_all_six_languages_accepted_in_api(language, monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    response = client.post("/api/analyze", json={"messages": [{"role":"user", "content":"I need a refund for a damaged product."}], "language": language})
+    assert response.status_code == 200
+    result = response.json()
+    assert result["language"] == language
+    assert result["summary"]["category"] == "consumer"
+    assert result["mode"] == "guided-demo"
+
+
+def test_unknown_language_is_rejected():
+    response = client.post("/api/analyze", json={"messages": [{"role":"user", "content":"I need a refund."}], "language": "xx"})
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("language,example,expected", [
+    ("hi", "कौन से दस्तावेज़ हैं?", True),
+    ("mr", "तुमच्याकडे पुरावा आहे का?", True),
+    ("te", "మీ వద్ద రసీదు ఉందా?", True),
+    ("ta", "உங்களிடம் ரசீது உள்ளதா?", True),
+    ("bn", "আপনার কাছে রসিদ আছে?", True),
+    ("hi", "Can you show the receipt?", False),
+])
+def test_native_script_signal(language, example, expected):
+    from backend.workflow import is_target_script
+    assert is_target_script(example, language) is expected
+
+
+def test_gemini_case_extraction_requires_selected_script(monkeypatch):
+    from backend import workflow
+    def fake_call(instruction, payload, max_tokens):
+        assert payload["selected_response_language"] == "Tamil"
+        assert "SELECTED RESPONSE LANGUAGE" in instruction
+        return {"category": "consumer", "story_english": "The user reports a missing refund.",
+                "timeline": [], "evidence": [], "position": "Ask the seller for a written response.",
+                "missing_questions": [], "followup_question": "What date did this happen?", "risk_flag": "none"}
+    monkeypatch.setattr(workflow, "_gemini_json", fake_call)
+    output = workflow.extract_case([{"role":"user", "content":"I want a refund."}], "ta")
+    assert output["followup_question"] == ""
+    assert output["category"] == "consumer"
+
+
+def test_pdf_document_type_is_forwarded_from_api():
+    response = client.post("/api/draft", json={
+        "messages": [{"role":"user","content":"I purchased a damaged laptop from a seller for INR 10000."}],
+        "category": "consumer", "language": "ta", "document_type":"notice", "confirmed": True,
+        "profile":{"counterparty":"Example Shop", "location":"Kanpur", "event_date":"Not known",
+                   "desired_resolution":"Refund", "facts_narrative":"I bought a damaged laptop."}})
+    assert response.status_code == 200, response.text
+    text = " ".join(page.extract_text() for page in PdfReader(BytesIO(response.content)).pages)
+    assert "DRAFT NOTICE OUTLINE" in text
+    assert "LAWYER REVIEW REQUIRED" in text

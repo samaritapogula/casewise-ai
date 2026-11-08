@@ -94,6 +94,7 @@ def analyze(messages: list[dict[str, str]], profile: dict[str, Any] | None = Non
 
     summary = {
         "issue": first,
+        "draft_facts": draft_narrative(messages),
         "category": chosen,
         "category_label": info["title"],
         "facts_reported": {PROFILE_LABELS[k]: v for k, v in fields.items() if v},
@@ -118,46 +119,105 @@ def analyze(messages: list[dict[str, str]], profile: dict[str, Any] | None = Non
     }
 
 
-def make_draft(messages: list[dict[str, str]], profile: dict[str, Any] | None = None, category: str = "auto") -> str:
+
+def draft_narrative(messages: list[dict[str, str]]) -> str:
+    """Keep only user-reported statements, not questions addressed to the chatbot.
+
+    This deliberately does not invent facts or paraphrase allegations as verified facts.
+    The result is an editable draft for the user to confirm.
+    """
+    sentences: list[str] = []
+    for msg in messages:
+        if msg.get("role") != "user":
+            continue
+        raw = clean(msg.get("content"), 2000)
+        # Protect common currency abbreviations from sentence splitting.
+        raw = re.sub(r"\bRs\.\s*(?=\d)", "INR ", raw, flags=re.I)
+        for part in re.split(r"(?<=[.!?])\s+|\n+", raw):
+            clause = clean(re.sub(r"\s+", " ", part), 350)
+            if not clause or clause.endswith("?"):
+                continue
+            if re.match(r"^(?:what|how|why|where|when|who|can|could|should|would|do|does|is|are|please|help|thanks|thank you)\b", clause, re.I):
+                continue
+            if re.search(r"\b(?:what should I do|please (?:draft|generate|write)|can you help|tell me what to do)\b", clause, re.I):
+                continue
+            if clause not in sentences:
+                sentences.append(clause)
+            if sum(len(x) for x in sentences) > 1000:
+                break
+        if sum(len(x) for x in sentences) > 1000:
+            break
+    return " ".join(sentences)[:1200].strip()
+
+
+
+def make_draft(messages: list[dict[str, str]], profile: dict[str, Any] | None = None,
+               category: str = "auto", *, confirmed: bool = False) -> str:
+    """Build a reviewable factual letter, never a formal legal notice.
+
+    Both essential details and an explicit review confirmation are validated on
+    the server, not just in the React UI.
+    """
     analysis = analyze(messages, profile, category)
     if analysis["needs_lawyer"]:
         raise ValueError("Draft generation disabled for potentially urgent or criminal matters; seek a qualified lawyer.")
-    first = clean(next(m["content"] for m in messages if m.get("role") == "user" and clean(m.get("content"))), 1500)
+    if not confirmed:
+        raise ValueError("Review the proposed facts and confirm they are accurate before generating a PDF.")
+
     facts = analysis["profile_used"]
-    name = facts["counterparty"] or "[Name of the other party]"
-    location = facts["location"] or "[City and State]"
-    amount = facts["amount"] or "[Amount, if applicable]"
-    date = facts["event_date"] or "[Relevant date]"
-    evidence = facts["evidence"] or "[List documents you have verified]"
-    request = facts["desired_resolution"] or "[Describe the resolution you want]"
+    required = ("counterparty", "location", "event_date", "desired_resolution")
+    missing = [PROFILE_LABELS[key] for key in required if not facts[key].strip()]
+    if missing:
+        raise ValueError("Please complete these details before generating a PDF: " + ", ".join(missing))
+
+    story = clean((profile or {}).get("facts_narrative"), 1400) or draft_narrative(messages)
+    story = draft_narrative([{"role": "user", "content": story}])
+    if not story:
+        raise ValueError("Please enter at least one factual statement about the dispute (not just a question).")
+
+    sender = clean((profile or {}).get("sender_name"), 160) or "[Your full name]"
+    contact = clean((profile or {}).get("sender_contact"), 180) or "[Your contact information]"
+    counterparty = facts["counterparty"]
+    location = facts["location"]
+    amount = facts["amount"].replace("₹", "INR ")
+    event_date = facts["event_date"]
+    evidence = facts["evidence"].replace(" (mentioned by user; availability unconfirmed)", "")
+    remedy = facts["desired_resolution"].rstrip(" .")
     category_label = analysis["summary"]["category_label"]
-    return "\n".join([
-        "DRAFT — FACTUAL REQUEST FOR RESOLUTION (NOT A FORMAL LEGAL NOTICE)",
-        "For review and editing; not legal advice. Do not send without checking facts and recipient.",
+
+    lines = [
+        "CASEWISE AI | DRAFT REQUEST FOR RESOLUTION",
+        "For review only - not a formal legal notice or legal advice.",
         "",
-        "From: [Your name and contact details]",
-        f"To: {name}",
-        f"Place: {location}",
-        "Date of letter: [Insert today's date when sending]",
+        f"From: {sender}",
+        f"Contact: {contact}",
+        f"To: {counterparty}",
+        f"City / State: {location}",
+        "Date prepared: [Add the date on which you send this letter]",
         "",
-        f"Subject: Request for resolution — {category_label}",
+        f"Subject: Request for resolution - {category_label}",
         "",
         "Dear Sir/Madam,",
         "",
-        "I am writing to request a resolution concerning the following issue, as I understand it:",
-        first,
+        "I am writing to seek a resolution of the matter described below. The following is my account of the events:",
+        story,
         "",
-        f"Relevant date (please verify): {date}",
-        f"Amount involved (please verify): {amount}",
-        f"Documents currently available (please verify): {evidence}",
+        f"Relevant event date: {event_date}",
+    ]
+    if amount:
+        lines.append(f"Amount involved: {amount}")
+    if evidence:
+        lines.append(f"Documents or evidence identified: {evidence}")
+    lines += [
         "",
-        f"I request: {request}.",
-        "Please acknowledge this letter and respond in writing within a mutually reasonable time.",
-        "I would prefer to resolve this matter amicably and keep a written record of communications.",
+        "Requested resolution:",
+        remedy[0].upper() + remedy[1:] + "." if remedy else "[Specify your requested resolution].",
+        "",
+        "Please acknowledge this request and respond in writing. I would prefer to resolve the matter amicably and keep a record of our correspondence.",
         "",
         "Sincerely,",
-        "[Your full name]",
+        sender,
         "",
-        "CHECK BEFORE SENDING: Confirm names, dates, amounts, evidence and accuracy. Seek legal review",
-        "before making legal allegations, imposing a deadline, or filing any court/authority document.",
-    ])
+        "REVIEW BEFORE SENDING: Confirm each statement, the recipient, dates, documents, amount and requested outcome. Seek qualified legal review if necessary. This letter is not a court filing or formal legal notice.",
+    ]
+    return "\n".join(lines)

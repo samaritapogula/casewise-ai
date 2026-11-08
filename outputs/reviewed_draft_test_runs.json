@@ -1,0 +1,343 @@
+[
+  {
+    "category": "consumer",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "I bought a damaged laptop online for INR 45,000. The shop refused my refund after I complained. What should I do?"
+        }
+      ],
+      "category": "consumer",
+      "profile": {
+        "counterparty": "Example Electronics",
+        "location": "Kanpur, Uttar Pradesh",
+        "event_date": "4 November 2026",
+        "desired_resolution": "A full refund of INR 45,000",
+        "evidence": "invoice, payment receipt"
+      },
+      "confirmed": true
+    },
+    "analysis": {
+      "assistant_message": "I can help organize this as a possible consumer complaint & refund issue. When did you pay or place the order, and what did the seller promise?",
+      "summary": {
+        "issue": "I bought a damaged laptop online for INR 45,000. The shop refused my refund after I complained. What should I do?",
+        "draft_facts": "I bought a damaged laptop online for INR 45,000. The shop refused my refund after I complained.",
+        "category": "consumer",
+        "category_label": "Consumer complaint & refund",
+        "facts_reported": {
+          "State or city": "Kanpur, Uttar Pradesh",
+          "Other party": "Example Electronics",
+          "Amount in dispute": "₹45,000",
+          "Relevant date": "4 November 2026",
+          "Evidence available": "invoice, payment receipt",
+          "Resolution requested": "A full refund of INR 45,000"
+        },
+        "missing_details": [],
+        "evidence_to_preserve": [
+          "A dated timeline of what happened",
+          "Agreements, invoices, notices and messages relevant to the dispute",
+          "Payment or transaction records, if any"
+        ],
+        "assessment": "Preliminary organization of user-provided facts; no determination of legal rights or case merits."
+      },
+      "next_steps": [
+        "Collect the invoice, order ID, payment proof and messages with the business.",
+        "Send a clear written request for the refund, repair or other resolution you seek.",
+        "Consider the National Consumer Helpline; check eligibility and procedure before any Consumer Commission filing on e-Jagriti."
+      ],
+      "sources": [
+        {
+          "id": "nch",
+          "title": "National Consumer Helpline",
+          "url": "https://consumerhelpline.gov.in/public/contact",
+          "description": "Government consumer grievance help; available channels include the NCH portal and helpline 1915.",
+          "verified_on": "2026-11-08"
+        },
+        {
+          "id": "ejagriti",
+          "title": "e-Jagriti — Consumer Commissions",
+          "url": "https://e-jagriti.gov.in/",
+          "description": "Official consumer-commission platform for complaint filing and case tracking; jurisdiction and admissibility require checking.",
+          "verified_on": "2026-11-08"
+        },
+        {
+          "id": "nalsa",
+          "title": "National Legal Services Authority — Legal Aid",
+          "url": "https://nalsa.gov.in/legal-aid/",
+          "description": "Official guidance on applying for legal aid through legal services authorities; eligibility must be checked.",
+          "verified_on": "2026-11-08"
+        }
+      ],
+      "safety_flags": [
+        "General information only, not a lawyer, legal opinion, or outcome prediction.",
+        "Sources are official starting points, not confirmation of eligibility, jurisdiction or a deadline."
+      ],
+      "needs_lawyer": false,
+      "mode": "guided-demo",
+      "source_status": "Curated official links reviewed 2026-11-08; not checked live during this request.",
+      "profile_used": {
+        "location": "Kanpur, Uttar Pradesh",
+        "counterparty": "Example Electronics",
+        "amount": "₹45,000",
+        "event_date": "4 November 2026",
+        "evidence": "invoice, payment receipt",
+        "desired_resolution": "A full refund of INR 45,000"
+      }
+    },
+    "pdf_generated": true,
+    "pdf_pages": 1,
+    "pdf_text": "CASEWISE AI | DRAFT REQUEST FOR RESOLUTION\nFor review only - not a formal legal notice or legal advice.\nFrom: [Your full name]\nContact: [Your contact information]\nTo: Example Electronics\nCity / State: Kanpur, Uttar Pradesh\nDate prepared: [Add the date on which you send this letter]\nSubject: Request for resolution - Consumer complaint & refund\nDear Sir/Madam,\nI am writing to seek a resolution of the matter described below. The following is my account of the events:\nI bought a damaged laptop online for INR 45,000. The shop refused my refund after I complained.\nRelevant event date: 4 November 2026\nAmount involved: INR 45,000\nDocuments or evidence identified: invoice, payment receipt\nRequested resolution:\nA full refund of INR 45,000.\nPlease acknowledge this request and respond in writing. I would prefer to resolve the matter amicably and\nkeep a record of our correspondence.\nSincerely,\n[Your full name]\nREVIEW BEFORE SENDING: Confirm each statement, the recipient, dates, documents, amount and requested outcome.\nSeek qualified legal review if necessary. This letter is not a court filing or formal legal notice.\n"
+  },
+  {
+    "category": "property",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "My landlord did not return my Rs. 25,000 deposit after I vacated the flat. I have a rental agreement and bank statements. How can I recover it?"
+        }
+      ],
+      "category": "property",
+      "profile": {
+        "counterparty": "Example Landlord",
+        "location": "Lucknow, Uttar Pradesh",
+        "event_date": "1 November 2026",
+        "desired_resolution": "Return of INR 25,000 deposit",
+        "evidence": "rental agreement, bank statement"
+      },
+      "confirmed": true
+    },
+    "analysis": {
+      "assistant_message": "I can help organize this as a possible property & rental issue. What state is the property in, and do you have a written rental or sale agreement?",
+      "summary": {
+        "issue": "My landlord did not return my Rs. 25,000 deposit after I vacated the flat. I have a rental agreement and bank statements. How can I recover it?",
+        "draft_facts": "My landlord did not return my INR 25,000 deposit after I vacated the flat. I have a rental agreement and bank statements.",
+        "category": "property",
+        "category_label": "Property & rental",
+        "facts_reported": {
+          "State or city": "Lucknow, Uttar Pradesh",
+          "Other party": "Example Landlord",
+          "Amount in dispute": "₹25,000",
+          "Relevant date": "1 November 2026",
+          "Evidence available": "rental agreement, bank statement",
+          "Resolution requested": "Return of INR 25,000 deposit"
+        },
+        "missing_details": [],
+        "evidence_to_preserve": [
+          "A dated timeline of what happened",
+          "Agreements, invoices, notices and messages relevant to the dispute",
+          "Payment or transaction records, if any"
+        ],
+        "assessment": "Preliminary organization of user-provided facts; no determination of legal rights or case merits."
+      },
+      "next_steps": [
+        "Save the agreement, payment records, notices and relevant messages in date order.",
+        "Write a factual request for clarification or resolution to the other party and keep proof of delivery.",
+        "Ask a local civil lawyer or legal-aid office to check the applicable state rules and any filing deadline."
+      ],
+      "sources": [
+        {
+          "id": "nalsa",
+          "title": "National Legal Services Authority — Legal Aid",
+          "url": "https://nalsa.gov.in/legal-aid/",
+          "description": "Official guidance on applying for legal aid through legal services authorities; eligibility must be checked.",
+          "verified_on": "2026-11-08"
+        },
+        {
+          "id": "contract",
+          "title": "India Code — Indian Contract Act, 1872",
+          "url": "https://www.indiacode.nic.in/handle/123456789/2187?col=123456789%2F1362",
+          "description": "Official central statute reference. Whether and how it applies depends on the agreement and facts.",
+          "verified_on": "2026-11-08"
+        }
+      ],
+      "safety_flags": [
+        "General information only, not a lawyer, legal opinion, or outcome prediction.",
+        "Sources are official starting points, not confirmation of eligibility, jurisdiction or a deadline.",
+        "Property and tenancy rules can differ by state and the type of property; local advice is important."
+      ],
+      "needs_lawyer": false,
+      "mode": "guided-demo",
+      "source_status": "Curated official links reviewed 2026-11-08; not checked live during this request.",
+      "profile_used": {
+        "location": "Lucknow, Uttar Pradesh",
+        "counterparty": "Example Landlord",
+        "amount": "₹25,000",
+        "event_date": "1 November 2026",
+        "evidence": "rental agreement, bank statement",
+        "desired_resolution": "Return of INR 25,000 deposit"
+      }
+    },
+    "pdf_generated": true,
+    "pdf_pages": 1,
+    "pdf_text": "CASEWISE AI | DRAFT REQUEST FOR RESOLUTION\nFor review only - not a formal legal notice or legal advice.\nFrom: [Your full name]\nContact: [Your contact information]\nTo: Example Landlord\nCity / State: Lucknow, Uttar Pradesh\nDate prepared: [Add the date on which you send this letter]\nSubject: Request for resolution - Property & rental\nDear Sir/Madam,\nI am writing to seek a resolution of the matter described below. The following is my account of the events:\nMy landlord did not return my INR 25,000 deposit after I vacated the flat. I have a rental agreement and\nbank statements.\nRelevant event date: 1 November 2026\nAmount involved: INR 25,000\nDocuments or evidence identified: rental agreement, bank statement\nRequested resolution:\nReturn of INR 25,000 deposit.\nPlease acknowledge this request and respond in writing. I would prefer to resolve the matter amicably and\nkeep a record of our correspondence.\nSincerely,\n[Your full name]\nREVIEW BEFORE SENDING: Confirm each statement, the recipient, dates, documents, amount and requested outcome.\nSeek qualified legal review if necessary. This letter is not a court filing or formal legal notice.\n"
+  },
+  {
+    "category": "employment",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "My employer has not paid my salary of INR 35,000. I sent an email and have my payslip. What are my rights?"
+        }
+      ],
+      "category": "employment",
+      "profile": {
+        "counterparty": "Example Employer",
+        "location": "Delhi",
+        "event_date": "31 October 2026",
+        "desired_resolution": "Payment of overdue salary of INR 35,000",
+        "evidence": "payslip, emails"
+      },
+      "confirmed": true
+    },
+    "analysis": {
+      "assistant_message": "I can help organize this as a possible employment & unpaid salary issue. What is your role, state of employment, and type of employment agreement?",
+      "summary": {
+        "issue": "My employer has not paid my salary of INR 35,000. I sent an email and have my payslip. What are my rights?",
+        "draft_facts": "My employer has not paid my salary of INR 35,000. I sent an email and have my payslip.",
+        "category": "employment",
+        "category_label": "Employment & unpaid salary",
+        "facts_reported": {
+          "State or city": "Delhi",
+          "Other party": "Example Employer",
+          "Amount in dispute": "₹35,000",
+          "Relevant date": "31 October 2026",
+          "Evidence available": "payslip, emails",
+          "Resolution requested": "Payment of overdue salary of INR 35,000"
+        },
+        "missing_details": [],
+        "evidence_to_preserve": [
+          "A dated timeline of what happened",
+          "Agreements, invoices, notices and messages relevant to the dispute",
+          "Payment or transaction records, if any"
+        ],
+        "assessment": "Preliminary organization of user-provided facts; no determination of legal rights or case merits."
+      },
+      "next_steps": [
+        "Preserve your offer letter or contract, payslips, bank records, and written requests to the employer.",
+        "Ask the employer or HR in writing for the payment breakdown and a proposed resolution.",
+        "Check whether a relevant labour authority or SAMADHAN process applies to your status and claim; seek professional advice on deadlines."
+      ],
+      "sources": [
+        {
+          "id": "samadhan",
+          "title": "Chief Labour Commissioner — Online Services",
+          "url": "https://clc.gov.in/clc/online-services",
+          "description": "Official information on SAMADHAN for eligible industrial disputes and worker claims; coverage depends on worker status and applicable law.",
+          "verified_on": "2026-11-08"
+        },
+        {
+          "id": "nalsa",
+          "title": "National Legal Services Authority — Legal Aid",
+          "url": "https://nalsa.gov.in/legal-aid/",
+          "description": "Official guidance on applying for legal aid through legal services authorities; eligibility must be checked.",
+          "verified_on": "2026-11-08"
+        }
+      ],
+      "safety_flags": [
+        "General information only, not a lawyer, legal opinion, or outcome prediction.",
+        "Sources are official starting points, not confirmation of eligibility, jurisdiction or a deadline.",
+        "Employment remedies differ by worker status, applicable law and location; SAMADHAN may not cover every employee."
+      ],
+      "needs_lawyer": false,
+      "mode": "guided-demo",
+      "source_status": "Curated official links reviewed 2026-11-08; not checked live during this request.",
+      "profile_used": {
+        "location": "Delhi",
+        "counterparty": "Example Employer",
+        "amount": "₹35,000",
+        "event_date": "31 October 2026",
+        "evidence": "payslip, emails",
+        "desired_resolution": "Payment of overdue salary of INR 35,000"
+      }
+    },
+    "pdf_generated": true,
+    "pdf_pages": 1,
+    "pdf_text": "CASEWISE AI | DRAFT REQUEST FOR RESOLUTION\nFor review only - not a formal legal notice or legal advice.\nFrom: [Your full name]\nContact: [Your contact information]\nTo: Example Employer\nCity / State: Delhi\nDate prepared: [Add the date on which you send this letter]\nSubject: Request for resolution - Employment & unpaid salary\nDear Sir/Madam,\nI am writing to seek a resolution of the matter described below. The following is my account of the events:\nMy employer has not paid my salary of INR 35,000. I sent an email and have my payslip.\nRelevant event date: 31 October 2026\nAmount involved: INR 35,000\nDocuments or evidence identified: payslip, emails\nRequested resolution:\nPayment of overdue salary of INR 35,000.\nPlease acknowledge this request and respond in writing. I would prefer to resolve the matter amicably and\nkeep a record of our correspondence.\nSincerely,\n[Your full name]\nREVIEW BEFORE SENDING: Confirm each statement, the recipient, dates, documents, amount and requested outcome.\nSeek qualified legal review if necessary. This letter is not a court filing or formal legal notice.\n"
+  },
+  {
+    "category": "contract",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": "The client has not paid INR 30,000 for my completed website project under our written contract. I have an invoice. Can you help?"
+        }
+      ],
+      "category": "contract",
+      "profile": {
+        "counterparty": "Example Client",
+        "location": "Hyderabad, Telangana",
+        "event_date": "30 October 2026",
+        "desired_resolution": "Payment of the outstanding INR 30,000",
+        "evidence": "contract, invoice"
+      },
+      "confirmed": true
+    },
+    "analysis": {
+      "assistant_message": "I can help organize this as a possible contract & payment issue. What did the parties agree to, and is it recorded in writing?",
+      "summary": {
+        "issue": "The client has not paid INR 30,000 for my completed website project under our written contract. I have an invoice. Can you help?",
+        "draft_facts": "The client has not paid INR 30,000 for my completed website project under our written contract. I have an invoice.",
+        "category": "contract",
+        "category_label": "Contract & payment",
+        "facts_reported": {
+          "State or city": "Hyderabad, Telangana",
+          "Other party": "Example Client",
+          "Amount in dispute": "₹30,000",
+          "Relevant date": "30 October 2026",
+          "Evidence available": "contract, invoice",
+          "Resolution requested": "Payment of the outstanding INR 30,000"
+        },
+        "missing_details": [],
+        "evidence_to_preserve": [
+          "A dated timeline of what happened",
+          "Agreements, invoices, notices and messages relevant to the dispute",
+          "Payment or transaction records, if any"
+        ],
+        "assessment": "Preliminary organization of user-provided facts; no determination of legal rights or case merits."
+      },
+      "next_steps": [
+        "Collect the contract, invoices, proof of performance and payment records.",
+        "Request the outstanding payment or agreed performance in writing, without asserting unverified legal penalties.",
+        "Have a lawyer check whether the agreement, limitation rules and dispute-resolution terms affect your options."
+      ],
+      "sources": [
+        {
+          "id": "contract",
+          "title": "India Code — Indian Contract Act, 1872",
+          "url": "https://www.indiacode.nic.in/handle/123456789/2187?col=123456789%2F1362",
+          "description": "Official central statute reference. Whether and how it applies depends on the agreement and facts.",
+          "verified_on": "2026-11-08"
+        },
+        {
+          "id": "nalsa",
+          "title": "National Legal Services Authority — Legal Aid",
+          "url": "https://nalsa.gov.in/legal-aid/",
+          "description": "Official guidance on applying for legal aid through legal services authorities; eligibility must be checked.",
+          "verified_on": "2026-11-08"
+        }
+      ],
+      "safety_flags": [
+        "General information only, not a lawyer, legal opinion, or outcome prediction.",
+        "Sources are official starting points, not confirmation of eligibility, jurisdiction or a deadline."
+      ],
+      "needs_lawyer": false,
+      "mode": "guided-demo",
+      "source_status": "Curated official links reviewed 2026-11-08; not checked live during this request.",
+      "profile_used": {
+        "location": "Hyderabad, Telangana",
+        "counterparty": "Example Client",
+        "amount": "₹30,000",
+        "event_date": "30 October 2026",
+        "evidence": "contract, invoice",
+        "desired_resolution": "Payment of the outstanding INR 30,000"
+      }
+    },
+    "pdf_generated": true,
+    "pdf_pages": 1,
+    "pdf_text": "CASEWISE AI | DRAFT REQUEST FOR RESOLUTION\nFor review only - not a formal legal notice or legal advice.\nFrom: [Your full name]\nContact: [Your contact information]\nTo: Example Client\nCity / State: Hyderabad, Telangana\nDate prepared: [Add the date on which you send this letter]\nSubject: Request for resolution - Contract & payment\nDear Sir/Madam,\nI am writing to seek a resolution of the matter described below. The following is my account of the events:\nThe client has not paid INR 30,000 for my completed website project under our written contract. I have an\ninvoice.\nRelevant event date: 30 October 2026\nAmount involved: INR 30,000\nDocuments or evidence identified: contract, invoice\nRequested resolution:\nPayment of the outstanding INR 30,000.\nPlease acknowledge this request and respond in writing. I would prefer to resolve the matter amicably and\nkeep a record of our correspondence.\nSincerely,\n[Your full name]\nREVIEW BEFORE SENDING: Confirm each statement, the recipient, dates, documents, amount and requested outcome.\nSeek qualified legal review if necessary. This letter is not a court filing or formal legal notice.\n"
+  }
+]

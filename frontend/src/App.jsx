@@ -47,6 +47,11 @@ export default function App() {
   const [error, setError] = useState('');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [apiStatus, setApiStatus] = useState(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [draftProfile, setDraftProfile] = useState({ ...emptyProfile, sender_name: '', sender_contact: '' });
+  const [draftFacts, setDraftFacts] = useState('');
+  const [draftConfirmed, setDraftConfirmed] = useState(false);
+  const [reviewError, setReviewError] = useState('');
   const bottom = useRef(null);
   const textarea = useRef(null);
   const sentMessages = messages.filter(m => m.role === 'user');
@@ -86,15 +91,29 @@ export default function App() {
   }
   function reset() {
     setMessages(initialMessages); setInput(''); setAnalysis(null); setProfile(emptyProfile);
-    setCategory('auto'); setError(''); setTab('summary');
+    setCategory('auto'); setError(''); setTab('summary'); setReviewOpen(false); setDraftConfirmed(false);
   }
+  function openDraftReview() {
+    if (!analysis || analysis.needs_lawyer || busy) return;
+    // Prefer an explicit correction in Case details over auto-detected text.
+    const autoFields = analysis.profile_used || {};
+    setDraftProfile({ ...emptyProfile, ...autoFields, ...Object.fromEntries(Object.entries(profile).filter(([, value]) => value?.trim())), sender_name: '', sender_contact: '' });
+    setDraftFacts(analysis.summary.draft_facts || '');
+    setDraftConfirmed(false);
+    setReviewError('');
+    setReviewOpen(true);
+  }
+  const essentialFields = ['counterparty', 'location', 'event_date', 'desired_resolution'];
+  const draftMissing = essentialFields.filter(key => !draftProfile[key]?.trim());
+
   async function downloadDraft() {
-    if (!sentMessages.length || downloading || analysis?.needs_lawyer) return;
-    setDownloading(true); setError('');
+    if (!sentMessages.length || downloading || analysis?.needs_lawyer || !draftConfirmed || draftMissing.length || !draftFacts.trim()) return;
+    setDownloading(true); setError(''); setReviewError('');
     try {
+      const safeProfile = { ...draftProfile, facts_narrative: draftFacts };
       const response = await fetch(`${API_BASE}/api/draft`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, category, profile }),
+        body: JSON.stringify({ messages, category, profile: safeProfile, confirmed: true }),
       });
       if (!response.ok) {
         const details = await response.json();
@@ -104,10 +123,13 @@ export default function App() {
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = objectUrl;
-      link.download = 'CaseWise-AI-Draft-Request.pdf';
+      link.download = 'CaseWise-AI-Reviewed-Draft.pdf';
       link.click();
       setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
-    } catch (e) { setError(e.message || 'PDF download failed.'); }
+      setProfile(draftProfile);
+      setReviewOpen(false);
+      await callAnalyze(messages, false, draftProfile, category);
+    } catch (e) { setReviewError(e.message || 'PDF download failed.'); }
     finally { setDownloading(false); }
   }
 
@@ -150,13 +172,27 @@ export default function App() {
               <div className="section-block"><div className="section-header"><h2>Information still needed</h2><button className="inline-button" onClick={() => setTab('details')}>Add details <ChevronRight size={13}/></button></div>{analysis.summary.missing_details.length ? <div className="missing-tags">{analysis.summary.missing_details.map(v => <span key={v}>{v}</span>)}</div> : <p className="small-success"><CheckCircle2 size={15}/> Basic fields supplied. More facts may still be required.</p>}</div>
               <div className="section-block"><h2>Official starting points</h2><div className="source-list">{analysis.sources.map(src => <a key={src.id} href={src.url} target="_blank" rel="noopener noreferrer"><span className="source-icon"><Landmark size={16}/></span><span><strong>{src.title}</strong><small>{src.description}</small></span><ExternalLink size={14}/></a>)}</div><p className="source-caveat">{analysis.source_status}</p></div>
               <div className="safety-card"><ShieldAlert size={17}/><div><strong>Know the limits</strong>{analysis.safety_flags.map((flag,i) => <p key={i}>{flag}</p>)}</div></div>
-              <div className="draft-card"><div className="draft-icon"><FileDown size={20}/></div><div><strong>Draft a resolution request</strong><p>Generate an editable-in-practice, preliminary PDF letter from your facts. Review it before sending.</p></div><button disabled={downloading || analysis.needs_lawyer} onClick={downloadDraft}>{downloading ? <LoaderCircle className="spin" size={16}/> : <Download size={16}/>} Download PDF</button></div>
+              <div className="draft-card"><div className="draft-icon"><FileDown size={20}/></div><div><strong>Draft a resolution request</strong><p>Review your collected facts, fill missing details, and confirm before creating the PDF.</p></div><button disabled={downloading || analysis.needs_lawyer || busy} onClick={openDraftReview}><ClipboardList size={16}/> Review &amp; generate PDF</button></div>
             </>}
           </> : <div className="details-tab"><div className="panel-topline">OPTIONAL FACT CHECK</div><h2>Complete your case details</h2><p>Add only details you're comfortable sharing. These fields are used to create a clearer summary and draft letter.</p><div className="profile-fields">{fieldConfig.map(([key,label,hint]) => <label key={key}>{label}<input value={profile[key]} maxLength={250} placeholder={hint} onChange={e => setProfile(p => ({ ...p, [key]: e.target.value }))}/></label>)}</div><button className="update-button" disabled={!sentMessages.length || busy} onClick={async () => { await callAnalyze(messages, false); setTab('summary'); }}>Update case overview <ArrowRight size={16}/></button><p className="privacy-note"><ShieldCheck size={15}/> Case text is not intentionally saved on the server. If Gemini is configured, conversational inputs are sent to its API.</p></div>}
           {error && <div className="error-box" role="alert"><ShieldAlert size={16}/> {error}</div>}
         </div>
       </aside>
     </main>
+    {reviewOpen && <div className="review-overlay" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget && !downloading) setReviewOpen(false); }}>
+      <section className="review-dialog" role="dialog" aria-modal="true" aria-labelledby="review-heading">
+        <div className="review-top"><div><span className="panel-topline">BEFORE YOU DOWNLOAD</span><h2 id="review-heading">Review your draft details</h2><p>Information suggested by the chat may be incomplete. Correct any facts below. The draft is a factual request, not a formal legal notice.</p></div><button type="button" className="review-close" aria-label="Close review" onClick={() => setReviewOpen(false)} disabled={downloading}><X size={19}/></button></div>
+        <div className="review-body">
+          <label className="review-label">Your factual account (editable)<textarea rows={5} maxLength={1200} value={draftFacts} onChange={e => { setDraftFacts(e.target.value); setDraftConfirmed(false); }}/><small>Remove any chatbot questions or claims you cannot verify. Only your confirmed wording will enter the letter.</small></label>
+          <div className="review-grid">{fieldConfig.map(([key,label,hint]) => <label className="review-label" key={key}>{label}{essentialFields.includes(key) && <span className="field-required"> Required</span>}<input value={draftProfile[key] || ''} maxLength={250} placeholder={hint} onChange={e => { setDraftProfile(p => ({ ...p, [key]: e.target.value })); setDraftConfirmed(false); }}/></label>)}</div>
+          <div className="review-grid">{[['sender_name','Your name (optional)'],['sender_contact','Your contact details (optional)']].map(([key,label]) => <label className="review-label" key={key}>{label}<input value={draftProfile[key] || ''} maxLength={180} placeholder="Leave blank to use a placeholder" onChange={e => { setDraftProfile(p => ({ ...p, [key]: e.target.value })); setDraftConfirmed(false); }}/></label>)}</div>
+          {draftMissing.length > 0 && <p className="review-alert"><ShieldAlert size={16}/> Complete {draftMissing.map(key => fieldConfig.find(([k]) => k === key)?.[1]).join(', ')} before generating. If a date is genuinely unknown, write “Not known” rather than guessing.</p>}
+          <label className="review-confirm"><input type="checkbox" checked={draftConfirmed} onChange={e => setDraftConfirmed(e.target.checked)}/> <span>I have reviewed the narrative and confirmed the details I supplied. I understand this is a preliminary letter and must be checked before sending.</span></label>
+          {reviewError && <p className="review-alert" role="alert">{reviewError}</p>}
+        </div>
+        <div className="review-actions"><button type="button" className="review-cancel" onClick={() => setReviewOpen(false)} disabled={downloading}>Cancel</button><button type="button" className="review-download" onClick={downloadDraft} disabled={downloading || !draftConfirmed || draftMissing.length > 0 || !draftFacts.trim()}>{downloading ? <LoaderCircle size={16} className="spin"/> : <Download size={16}/>} Generate reviewed PDF</button></div>
+      </section>
+    </div>}
     <footer className="site-footer"><span>© 2026 CaseWise AI · Built as an explainable civil-guidance prototype</span><span>Not legal advice · India-focused</span></footer>
   </div>;
 }

@@ -1,2 +1,110 @@
-# casewise-ai
-AI-powered legal assistant for Indian civil disputes
+# CaseWise AI — Indian Civil Dispute Assistant (MVP)
+
+**An explainable, cautious conversational prototype** for four everyday civil categories in India: property/rental, consumer refunds, unpaid salary/employment, and contract/payment disputes.
+
+CaseWise AI is a **demonstration, not a lawyer**. It never guarantees outcomes, sets legal deadlines, or invents statutes. State-specific property and employment rules are intentionally not summarized as universal national law.
+
+## What works
+
+- React chat interface and free-text issue classification (or manual category choice)
+- Fact capture, editable case details, missing-information prompts and next-step guidance
+- Safe source links to India Code, NALSA, NCH, e-Jagriti and Chief Labour Commissioner
+- A downloadable **PDF factual request for resolution** (not a formal legal notice)
+- Safety alerts for urgent/criminal matters, with document generation blocked in those cases
+- Optional Gemini-assisted **question wording** with a configurable provider and model
+- Fully functional, deterministic **guided-demo** mode without any API key
+- No database / no intentional server-side case persistence
+
+## Run locally
+
+Requirements: **Python 3.10+** and **Node 18+**.
+
+Open two terminals from the repository root.
+
+**Terminal 1 — Backend**
+
+```bash
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+python -m uvicorn backend.main:app --reload --port 8000
+```
+
+**Terminal 2 — React frontend**
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open **http://localhost:5173**. The Vite development proxy forwards `/api` to the FastAPI backend.
+
+### Optional: real LLM-assisted follow-ups
+
+In the backend shell, **before starting Uvicorn**, set an API key using your own free-tier Gemini account:
+
+```bash
+# macOS / Linux
+export GEMINI_API_KEY='your-key-here'
+export GEMINI_MODEL='gemini-2.5-flash'
+
+# Windows PowerShell
+$env:GEMINI_API_KEY='your-key-here'
+$env:GEMINI_MODEL='gemini-2.5-flash'
+```
+
+No key is required for the guided demo. With a key, user conversation snippets are sent to the external Gemini API. The language model only provides **intake wording**; fixed rules produce case summaries and source-linked next steps. If the API fails, the app falls back gracefully. **Do not put the API key in React/Vite or commit it to GitHub.**
+
+For a separately hosted frontend, set `VITE_API_BASE_URL=https://your-backend-host` in `frontend/.env.local` before building. In the backend configure `CASEWISE_ALLOWED_ORIGINS=https://your-frontend-host`. Hosting the frontend on Vercel does **not** automatically host FastAPI; deploy both services or use a Python-capable host for the backend.
+
+## Test the actual backend
+
+```bash
+python -m pytest -q
+```
+
+The `tests/` folder tests classifications, no invented facts or statutes, urgent-case blocking, source links and generated PDF. `outputs/raw_test_runs.json` holds **nine unedited engine run results** on synthetic inputs; these are samples rather than evidence of legal accuracy.
+
+## API
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/health` | GET | Service / LLM mode |
+| `/api/sources` | GET | Curated references |
+| `/api/analyze` | POST | Analysis and conversation follow-up |
+| `/api/draft` | POST | Preliminary PDF request for resolution |
+
+Example:
+
+```bash
+curl -X POST http://localhost:8000/api/analyze \
+  -H 'Content-Type: application/json' \
+  -d '{"messages":[{"role":"user","content":"The seller denied my refund of Rs 3000 for a damaged product."}],"category":"auto","profile":{}}'
+```
+
+## Architecture / hybrid choice
+
+Reuses the **React + FastAPI architecture and explanation-oriented interaction design** explored in the earlier joint case-outcome-prediction project. It is a new implementation focused on intake and concrete user actions. The old ILDC/XGBoost `ACCEPTED/REJECTED` model, SHAP predictions and criminal-case argument rules are **not reused** because they have not been validated for these civil-advice scenarios. Optional future extensions could add verified precedents with provenance after evaluation.
+
+## Source-verification approach
+
+`backend/knowledge.py` contains a **small, reviewed whitelist** of government/official links as of **2026-11-08**. Users can open each original source. The product does not claim that the URLs were freshly checked on every request, does not invent section citations, and avoids definitive advice about eligibility, jurisdiction or limitation periods. If facts indicate urgent litigation/safety issues or criminal cases, it recommends professional help. Source links alone do not prove the legal advice is correct.
+
+## Known limitations
+
+1. Guided mode uses lightweight keyword classification and generic fact-finding, **not** a complete legal reasoner. It can misclassify mixed or ambiguous issues.
+2. Optional Gemini follow-ups improve natural conversation but cannot guarantee fully safe or accurate output; no unverified legal citations are promoted as authorities.
+3. Location/date/amount detection is incomplete; users should review the case details panel, and dates or missing information may remain unknown.
+4. India-specific legal remedies and deadlines depend on jurisdiction, case facts, and changes to law. A lawyer must verify before filing.
+5. PDF drafts can contain user allegations; they are preliminary factual letters, not legal notices ready for court filing. The frontend currently offers PDF download rather than a WYSIWYG editor.
+6. No persistent chat history, uploaded document analysis, authentication, voice input, Hindi translation, or formal case prediction.
+
+## Assignment integrity
+
+The earlier legal-outcome predictor was a joint project and is referenced for architecture only. This new MVP is a separate implementation with explicit limitations and synthetic tests. AI assistants were used to scaffold code and content; the developer must independently review and be ready to explain each component. One common AI failure to document: confidently fabricated or overgeneralized legal provisions. This implementation prevents citation generation in the fallback and restricts the LLM to intake wording, but still requires human review.
+
+## Confidentiality
+
+This repo contains only synthetic test examples and published official URLs. **Do not** commit real case documents, personal details, or private API keys.

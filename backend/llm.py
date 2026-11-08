@@ -8,6 +8,11 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Read the user-created local .env file; do not store keys in this repository.
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=False)
 
 MODEL_NAME = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 

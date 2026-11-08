@@ -3,7 +3,7 @@ import {
   ArrowRight, BookOpen, CheckCircle2, ChevronRight, CircleHelp, ClipboardList,
   Download, ExternalLink, FileDown, FileText, Info, Landmark, LoaderCircle,
   MessageCircle, RotateCcw, Scale, Send, ShieldAlert, ShieldCheck, Sparkles,
-  UserRound, Wallet, Building2, House, Menu, X,
+  UserRound, Wallet, Building2, House, Menu, X, Mic, MicOff, Languages, MessageSquareText,
 } from 'lucide-react';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -14,6 +14,8 @@ const options = [
   { value: 'employment', label: 'Employment & salary', icon: Building2 },
   { value: 'contract', label: 'Contract & payments', icon: FileText },
 ];
+const languages = [{ value: 'en', label: 'English', speech: 'en-IN' }, { value: 'hi', label: 'हिन्दी', speech: 'hi-IN' }, { value: 'te', label: 'తెలుగు', speech: 'te-IN' }];
+const documentTypes = [{value:'request',label:'Resolution request'}, {value:'notice',label:'Notice outline (lawyer review)'}, {value:'complaint',label:'Complaint draft'}, {value:'reply',label:'Reply draft'}, {value:'application',label:'Application for assistance'}];
 const fieldConfig = [
   ['location', 'City / state', 'e.g. Kanpur, Uttar Pradesh'],
   ['counterparty', 'Other party', 'e.g. landlord / company'],
@@ -37,6 +39,13 @@ function LabelPill({ icon: Icon, children }) {
 
 export default function App() {
   const [category, setCategory] = useState('auto');
+  const [language, setLanguage] = useState('en');
+  const [listening, setListening] = useState(false);
+  const speechRef = useRef(null);
+  const [documentType, setDocumentType] = useState('request');
+  const [argument, setArgument] = useState('');
+  const [practiceResult, setPracticeResult] = useState(null);
+  const [practicing, setPracticing] = useState(false);
   const [messages, setMessages] = useState(initialMessages);
   const [input, setInput] = useState('');
   const [profile, setProfile] = useState(emptyProfile);
@@ -60,13 +69,14 @@ export default function App() {
     fetch(`${API_BASE}/api/health`).then(r => r.ok ? r.json() : Promise.reject()).then(setApiStatus).catch(() => setApiStatus({ status: 'offline' }));
   }, []);
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [messages, busy]);
+  useEffect(() => () => speechRef.current?.stop(), []);
 
   async function callAnalyze(next, addReply = true, formProfile = profile, formCategory = category) {
     setBusy(true); setError('');
     try {
       const response = await fetch(`${API_BASE}/api/analyze`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: next, category: formCategory, profile: formProfile }),
+        body: JSON.stringify({ messages: next, category: formCategory, profile: formProfile, language }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Analysis request failed.');
@@ -76,6 +86,37 @@ export default function App() {
     finally { setBusy(false); }
   }
 
+  function toggleVoice() {
+    if (listening) { speechRef.current?.stop(); return; }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) { setError('Speech recognition is not available in this browser. You can still type your message.'); return; }
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = languages.find(item => item.value === language)?.speech || 'en-IN';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.onresult = event => {
+        const transcript = Array.from(event.results).map(item => item[0]?.transcript || '').join(' ').trim();
+        if (transcript) setInput(old => [old, transcript].filter(Boolean).join(' '));
+        textarea.current?.focus();
+      };
+      recognition.onerror = event => { setError('Voice input: ' + (event.error || 'recognition failed') + '. You can type instead.'); setListening(false); };
+      recognition.onend = () => setListening(false);
+      speechRef.current = recognition;
+      setError(''); recognition.start(); setListening(true);
+    } catch { setListening(false); setError('Microphone could not start. Check browser microphone permission.'); }
+  }
+  async function practice() {
+    if (!sentMessages.length || analysis?.needs_lawyer || argument.trim().length < 10 || practicing) return;
+    setPracticing(true); setError(''); setPracticeResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/practice`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, category, profile, language, argument }) });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.detail || 'Argument practice failed.');
+      setPracticeResult(result);
+    } catch (e) { setError(e.message || 'Argument practice failed.'); }
+    finally { setPracticing(false); }
+  }
   function onSend(event) {
     event?.preventDefault();
     const value = input.trim();
@@ -92,13 +133,14 @@ export default function App() {
   function reset() {
     setMessages(initialMessages); setInput(''); setAnalysis(null); setProfile(emptyProfile);
     setCategory('auto'); setError(''); setTab('summary'); setReviewOpen(false); setDraftConfirmed(false);
+    speechRef.current?.stop(); setListening(false); setArgument(''); setPracticeResult(null); setDocumentType('request');
   }
   function openDraftReview() {
     if (!analysis || analysis.needs_lawyer || busy) return;
     // Prefer an explicit correction in Case details over auto-detected text.
     const autoFields = analysis.profile_used || {};
     setDraftProfile({ ...emptyProfile, ...autoFields, ...Object.fromEntries(Object.entries(profile).filter(([, value]) => value?.trim())), sender_name: '', sender_contact: '' });
-    setDraftFacts(analysis.summary.draft_facts || '');
+    setDraftFacts(analysis.summary.ai_extracted_case?.story_english || analysis.summary.draft_facts || '');
     setDraftConfirmed(false);
     setReviewError('');
     setReviewOpen(true);
@@ -113,7 +155,7 @@ export default function App() {
       const safeProfile = { ...draftProfile, facts_narrative: draftFacts };
       const response = await fetch(`${API_BASE}/api/draft`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, category, profile: safeProfile, confirmed: true }),
+        body: JSON.stringify({ messages, category, profile: safeProfile, confirmed: true, document_type: documentType, language }),
       });
       if (!response.ok) {
         const details = await response.json();
@@ -123,7 +165,7 @@ export default function App() {
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = objectUrl;
-      link.download = 'CaseWise-AI-Reviewed-Draft.pdf';
+      link.download = `CaseWise-AI-${documentType}-draft.pdf`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
       setProfile(draftProfile);
@@ -149,14 +191,14 @@ export default function App() {
         </div>
         <div className="chat-card">
           <div className="chat-heading"><div><div className="chat-icon"><MessageCircle size={17}/></div><div><strong>Case conversation</strong><small>{analysis ? `${analysis.summary.category_label} · ${analysis.mode === 'gemini-assisted' ? 'AI-assisted intake' : 'Guided demo mode'}` : 'Start by describing your dispute'}</small></div></div><button className="ghost-action" title="Start a new conversation" onClick={reset}><RotateCcw size={15}/> <span>Reset</span></button></div>
-          <div className="category-bar"><span>Type of issue</span><div className="category-select-wrap"><select aria-label="Select civil dispute category" value={category} onChange={e => setCategory(e.target.value)}>{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select><ChevronRight size={14}/></div></div>
+          <div className="category-bar"><span>Type of issue</span><div className="category-controls"><div className="category-select-wrap"><select aria-label="Select civil dispute category" value={category} onChange={e => setCategory(e.target.value)}>{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select><ChevronRight size={14}/></div><div className="category-select-wrap"><Languages size={14}/><select aria-label="Conversation language" value={language} onChange={e => setLanguage(e.target.value)}>{languages.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}</select></div></div></div>
           <div className="chat-stream" aria-live="polite">
             {messages.map((m,i) => <div className={`chat-message ${m.role}`} key={i}>{m.role === 'assistant' && <div className="chat-avatar"><Scale size={15}/></div>}<div className="chat-content"><div className="chat-speaker">{m.role === 'assistant' ? 'CASEWISE AI' : 'YOU'}</div><p>{m.content}</p></div></div>)}
             {busy && <div className="chat-message assistant"><div className="chat-avatar"><Scale size={15}/></div><div className="chat-content"><div className="chat-speaker">CASEWISE AI</div><p className="loading-text"><LoaderCircle size={14} className="spin"/> Reviewing the facts...</p></div></div>}
             {messages.length === 1 && <div className="samples"><span>Or try an example</span><div className="sample-list">{sampleCases.map(s => <button key={s.label} onClick={() => { setInput(s.text); textarea.current?.focus(); }}>{s.label}<ArrowRight size={13}/></button>)}</div></div>}
             <div ref={bottom}/>
           </div>
-          <form className="composer" onSubmit={onSend}><textarea ref={textarea} value={input} rows={2} maxLength={2000} placeholder="Describe what happened, when, and what outcome you want..." onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }}/><div className="composer-footer"><span><Info size={13}/> Do not enter sensitive personal identifiers</span><button type="submit" disabled={!input.trim() || busy} className="send-button">Send <Send size={15}/></button></div></form>
+          <form className="composer" onSubmit={onSend}><textarea ref={textarea} value={input} rows={2} maxLength={2000} placeholder="Describe what happened, when, and what outcome you want..." onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }}/><div className="composer-footer"><span><Info size={13}/> Voice transcription may use your browser's speech service; review before sending.</span><div className="composer-actions"><button type="button" aria-label={listening ? 'Stop microphone' : 'Start voice input'} title={listening ? 'Stop listening' : 'Speak in selected language'} onClick={toggleVoice} className={`voice-button ${listening ? 'recording' : ''}`}>{listening ? <MicOff size={16}/> : <Mic size={16}/>}</button><button type="submit" disabled={!input.trim() || busy} className="send-button">Send <Send size={15}/></button></div></div></form>
         </div>
         <div className="footnote"><ShieldAlert size={15}/> CaseWise AI is a demonstration tool, not a lawyer. Check all advice and legal deadlines with a professional.</div>
       </section>
@@ -167,12 +209,14 @@ export default function App() {
             <div className="panel-topline"><span>YOUR CASE FILE</span>{analysis && <span className="category-tag">{analysis.summary.category_label}</span>}</div>
             {!analysis ? <div className="empty-overview"><div className="empty-circle"><BookOpen size={32} strokeWidth={1.6}/></div><h3>Your case starts here</h3><p>Share your situation in the chat. A structured summary, possible next steps, and source links will appear here.</p><button onClick={() => textarea.current?.focus()}>Describe your case <ArrowRight size={14}/></button></div> : <>
               <div className="section-block"><h2>What you've told us</h2><p className="issue-text">{analysis.summary.issue}</p></div>
+              <div className="section-block"><h2>Structured case file</h2>{analysis.summary.ai_extracted_case ? <><p className="issue-text">{analysis.summary.ai_extracted_case.story_english}</p><h3 className="micro-heading">Timeline (reported)</h3><ul className="small-bullets">{analysis.summary.ai_extracted_case.timeline.length ? analysis.summary.ai_extracted_case.timeline.map((t,i) => <li key={i}>{t.date || 'Date unknown'} — {t.event}</li>) : <li>No dated events identified yet.</li>}</ul><h3 className="micro-heading">Evidence mentioned</h3><ul className="small-bullets">{analysis.summary.ai_extracted_case.evidence_reported.length ? analysis.summary.ai_extracted_case.evidence_reported.map((item,i)=><li key={i}>{item}</li>) : <li>No supporting proof identified yet.</li>}</ul><h3 className="micro-heading">Where you may stand</h3><p className="issue-text">{analysis.summary.ai_extracted_case.position_suggestion || 'Options depend on your facts, local rules and eligibility. Review the official starting points below.'}</p><p className="source-caveat">{analysis.summary.ai_extracted_case.verification}</p></> : <p className="source-caveat">Add clear facts, dates and proof in the chat or Case details. With Gemini configured, an AI-suggested timeline appears here. All extracted details require review.</p>}</div>
               {Object.keys(analysis.summary.facts_reported).length > 0 && <div className="section-block"><h2>Facts captured</h2><dl className="facts-list">{Object.entries(analysis.summary.facts_reported).map(([k,v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></div>}
               <div className="section-block"><div className="section-header"><h2>Suggested next steps</h2><span className="subtle-label">General information</span></div><ol className="steps-list">{analysis.next_steps.map((v,i) => <li key={i}><span className="step-number">{i+1}</span><span>{v}</span></li>)}</ol></div>
               <div className="section-block"><div className="section-header"><h2>Information still needed</h2><button className="inline-button" onClick={() => setTab('details')}>Add details <ChevronRight size={13}/></button></div>{analysis.summary.missing_details.length ? <div className="missing-tags">{analysis.summary.missing_details.map(v => <span key={v}>{v}</span>)}</div> : <p className="small-success"><CheckCircle2 size={15}/> Basic fields supplied. More facts may still be required.</p>}</div>
               <div className="section-block"><h2>Official starting points</h2><div className="source-list">{analysis.sources.map(src => <a key={src.id} href={src.url} target="_blank" rel="noopener noreferrer"><span className="source-icon"><Landmark size={16}/></span><span><strong>{src.title}</strong><small>{src.description}</small></span><ExternalLink size={14}/></a>)}</div><p className="source-caveat">{analysis.source_status}</p></div>
               <div className="safety-card"><ShieldAlert size={17}/><div><strong>Know the limits</strong>{analysis.safety_flags.map((flag,i) => <p key={i}>{flag}</p>)}</div></div>
-              <div className="draft-card"><div className="draft-icon"><FileDown size={20}/></div><div><strong>Draft a resolution request</strong><p>Review your collected facts, fill missing details, and confirm before creating the PDF.</p></div><button disabled={downloading || analysis.needs_lawyer || busy} onClick={openDraftReview}><ClipboardList size={16}/> Review &amp; generate PDF</button></div>
+              <div className="draft-card"><div className="draft-icon"><FileDown size={20}/></div><div><strong>Prepare a document</strong><p>Choose a request, notice outline, complaint, reply or application. Review every fact before creating a PDF.</p></div><button disabled={downloading || analysis.needs_lawyer || busy} onClick={openDraftReview}><ClipboardList size={16}/> Review &amp; generate PDF</button></div>
+              <div className="practice-card"><h2><MessageSquareText size={16}/> Practise your argument</h2><p>Try explaining your side. CaseWise AI will ask a respectful opposing-side question and suggest improvements. Not a prediction.</p><textarea maxLength={1600} rows={3} value={argument} onChange={e => setArgument(e.target.value)} placeholder="My position is... The evidence is..."/><button onClick={practice} disabled={!sentMessages.length || analysis.needs_lawyer || argument.trim().length < 10 || practicing}>{practicing ? 'Thinking...' : 'Practise with AI'}</button>{practiceResult && <div className="practice-result"><strong>Other side might ask</strong><p>{practiceResult.opponent_question}</p><strong>How to improve your argument</strong><p>{practiceResult.feedback}</p><small>{practiceResult.mode === 'guided-demo' ? 'Offline demo feedback' : 'Gemini-assisted practice; verify details'}</small></div>}</div>
             </>}
           </> : <div className="details-tab"><div className="panel-topline">OPTIONAL FACT CHECK</div><h2>Complete your case details</h2><p>Add only details you're comfortable sharing. These fields are used to create a clearer summary and draft letter.</p><div className="profile-fields">{fieldConfig.map(([key,label,hint]) => <label key={key}>{label}<input value={profile[key]} maxLength={250} placeholder={hint} onChange={e => setProfile(p => ({ ...p, [key]: e.target.value }))}/></label>)}</div><button className="update-button" disabled={!sentMessages.length || busy} onClick={async () => { await callAnalyze(messages, false); setTab('summary'); }}>Update case overview <ArrowRight size={16}/></button><p className="privacy-note"><ShieldCheck size={15}/> Case text is not intentionally saved on the server. If Gemini is configured, conversational inputs are sent to its API.</p></div>}
           {error && <div className="error-box" role="alert"><ShieldAlert size={16}/> {error}</div>}
@@ -181,9 +225,10 @@ export default function App() {
     </main>
     {reviewOpen && <div className="review-overlay" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget && !downloading) setReviewOpen(false); }}>
       <section className="review-dialog" role="dialog" aria-modal="true" aria-labelledby="review-heading">
-        <div className="review-top"><div><span className="panel-topline">BEFORE YOU DOWNLOAD</span><h2 id="review-heading">Review your draft details</h2><p>Information suggested by the chat may be incomplete. Correct any facts below. The draft is a factual request, not a formal legal notice.</p></div><button type="button" className="review-close" aria-label="Close review" onClick={() => setReviewOpen(false)} disabled={downloading}><X size={19}/></button></div>
+        <div className="review-top"><div><span className="panel-topline">BEFORE YOU DOWNLOAD</span><h2 id="review-heading">Review your document draft</h2><p>Information suggested by the chat may be incomplete. Correct any facts below. The draft is a factual request, not a formal legal notice.</p></div><button type="button" className="review-close" aria-label="Close review" onClick={() => setReviewOpen(false)} disabled={downloading}><X size={19}/></button></div>
         <div className="review-body">
-          <label className="review-label">Your factual account (editable)<textarea rows={5} maxLength={1200} value={draftFacts} onChange={e => { setDraftFacts(e.target.value); setDraftConfirmed(false); }}/><small>Remove any chatbot questions or claims you cannot verify. Only your confirmed wording will enter the letter.</small></label>
+          <label className="review-label">Choose document type<select className="doc-type-select" value={documentType} onChange={e=>{setDocumentType(e.target.value);setDraftConfirmed(false)}}>{documentTypes.map(d=><option key={d.value} value={d.value}>{d.label}</option>)}</select><small>All options create a draft for review, never an official filing. Notice and reply drafts need legal review.</small></label>
+          <label className="review-label">Your factual account (editable)<textarea rows={5} maxLength={1200} value={draftFacts} onChange={e => { setDraftFacts(e.target.value); setDraftConfirmed(false); }}/><small>PDF drafts are currently in English. Check any AI-translated narrative, remove questions or unverified claims, and confirm wording before downloading.</small></label>
           <div className="review-grid">{fieldConfig.map(([key,label,hint]) => <label className="review-label" key={key}>{label}{essentialFields.includes(key) && <span className="field-required"> Required</span>}<input value={draftProfile[key] || ''} maxLength={250} placeholder={hint} onChange={e => { setDraftProfile(p => ({ ...p, [key]: e.target.value })); setDraftConfirmed(false); }}/></label>)}</div>
           <div className="review-grid">{[['sender_name','Your name (optional)'],['sender_contact','Your contact details (optional)']].map(([key,label]) => <label className="review-label" key={key}>{label}<input value={draftProfile[key] || ''} maxLength={180} placeholder="Leave blank to use a placeholder" onChange={e => { setDraftProfile(p => ({ ...p, [key]: e.target.value })); setDraftConfirmed(false); }}/></label>)}</div>
           {draftMissing.length > 0 && <p className="review-alert"><ShieldAlert size={16}/> Complete {draftMissing.map(key => fieldConfig.find(([k]) => k === key)?.[1]).join(', ')} before generating. If a date is genuinely unknown, write “Not known” rather than guessing.</p>}

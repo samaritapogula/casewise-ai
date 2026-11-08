@@ -70,6 +70,7 @@ def analyze_case(request: Request):
         if proposed and proposed.get("risk_flag") in ("urgent", "criminal"):
             data["needs_lawyer"] = True
             data["next_steps"] = ["Consult a qualified local lawyer promptly and preserve relevant dates, documents and notices."]
+            data["assistant_message"] = "This may involve an urgent or criminal matter beyond this civil-dispute prototype. Seek prompt help from a qualified local lawyer; do not rely on this chatbot."
             data["safety_flags"].insert(0, "Potential urgent/criminal issue flagged by AI; this prototype cannot assess it. Seek professional advice.")
         data["languages_available"] = LANGUAGES
         data["language"] = request.language

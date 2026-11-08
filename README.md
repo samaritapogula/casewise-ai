@@ -4,6 +4,26 @@
 
 CaseWise AI is a **demonstration, not a lawyer**. It never guarantees outcomes, sets legal deadlines, or invents statutes. State-specific property and employment rules are intentionally not summarized as universal national law.
 
+## Multilingual case-building workflow (November 2026 upgrade)
+
+- **Text:** English, Hindi and Telugu are available using the language switcher. Gemini can suggest an English case narrative, dated events, explicitly mentioned proof, missing facts and a follow-up question. Every extracted detail is **unverified until the user reviews it**. Without Gemini, the app still runs in basic English guided mode; full multilingual understanding is not guaranteed.
+- **Voice input:** The microphone uses the browser's SpeechRecognition / webkitSpeechRecognition implementation. Language tags are en-IN, hi-IN and te-IN. Browser compatibility and language availability vary; some browsers send microphone audio to their recognition service. Recognized text stays editable and must be sent deliberately. Voice recognition is not a separately hosted transcription service.
+- **Where the user stands:** The app distinguishes reported facts from uncertain information. It offers cautious general options and official starting points, not eligibility determinations or predictions.
+- **Documents:** The review form lets a user choose a factual request, proposed notice outline, complaint, reply, or application. Every PDF is clearly labelled as a **draft**, never a formal legal notice or filing. The PDF templates are English-only, require an English narrative, missing fields, and explicit review confirmation; any formal notice/reply should be reviewed by a lawyer.
+- **Argument practice:** `/api/practice` challenges a user with a factual opposing-side question and offers evidence-focused feedback. It never estimates odds of winning or fabricates precedents. In offline mode it uses a generic practice prompt.
+- **Limits:** A Gemini key activates the language features but does not guarantee accuracy. Multilingual and voice quality have not been validated across all browsers or Indian dialects. The legal sources are curated navigation links rather than live authoritative conclusions. Do not enter sensitive identifying information during testing.
+
+To try the enhanced interface after pulling the latest code on macOS:
+
+```bash
+cd ~/Desktop/casewise-ai
+git pull origin main
+bash scripts/setup_mac.sh
+bash scripts/run_mac.sh
+```
+
+Use the language picker and microphone in the chat. After sharing a case, review the **Structured case file**, select a document type in the PDF review dialog, or try **Practise your argument**. Check browser microphone permissions if dictation is unavailable.
+
 ## What works
 
 - React chat interface and free-text issue classification (or manual category choice)
@@ -11,7 +31,7 @@ CaseWise AI is a **demonstration, not a lawyer**. It never guarantees outcomes, 
 - Safe source links to India Code, NALSA, NCH, e-Jagriti and Chief Labour Commissioner
 - A downloadable **PDF factual request for resolution**, generated after user fact review and confirmation (not a formal legal notice)
 - Safety alerts for urgent/criminal matters, with document generation blocked in those cases
-- Optional Gemini-assisted **question wording** with a configurable provider and model
+- Optional Gemini-assisted **multilingual intake, structured case extraction and factual argument practice** with a configurable provider and model
 - Fully functional, deterministic **guided-demo** mode without any API key
 - No database / no intentional server-side case persistence
 
@@ -55,7 +75,7 @@ $env:GEMINI_API_KEY='your-key-here'
 $env:GEMINI_MODEL='gemini-2.5-flash'
 ```
 
-No key is required for the guided demo. With a key, user conversation snippets are sent to the external Gemini API. The language model only provides **intake wording**; fixed rules produce case summaries and source-linked next steps. If the API fails, the app falls back gracefully. **Do not put the API key in React/Vite or commit it to GitHub.**
+No key is required for the guided demo. With a key, user conversation snippets are sent to the external Gemini API. The language model proposes **unverified structured case facts, multilingual intake wording, optional translations, and argument practice**; fixed rules retain source-linked next steps and safety conditions. Never treat model text as verified law. If the API fails, the app falls back gracefully. **Do not put the API key in React/Vite or commit it to GitHub.**
 
 For a separately hosted frontend, set `VITE_API_BASE_URL=https://your-backend-host` in `frontend/.env.local` before building. In the backend configure `CASEWISE_ALLOWED_ORIGINS=https://your-frontend-host`. Hosting the frontend on Vercel does **not** automatically host FastAPI; deploy both services or use a Python-capable host for the backend.
 
@@ -84,7 +104,8 @@ The `tests/` folder tests classifications, no invented facts or statutes, urgent
 | `/api/health` | GET | Service / LLM mode |
 | `/api/sources` | GET | Curated references |
 | `/api/analyze` | POST | Analysis and conversation follow-up |
-| `/api/draft` | POST | Preliminary PDF request for resolution |
+| `/api/draft` | POST | Reviewed PDF draft; set `document_type` and `confirmed=true` |
+| `/api/practice` | POST | Civil-dispute argument rehearsal and feedback |
 
 Example:
 

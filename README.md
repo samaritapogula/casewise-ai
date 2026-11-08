@@ -15,6 +15,25 @@ CaseWise AI is a **demonstration, not a lawyer**. It never guarantees outcomes, 
 - Fully functional, deterministic **guided-demo** mode without any API key
 - No database / no intentional server-side case persistence
 
+## Quick macOS setup (Gemini key stays on your Mac)
+
+Clone the repository and run the included setup helper:
+
+```bash
+cd ~/Desktop
+git clone https://github.com/samaritapogula/casewise-ai.git
+cd casewise-ai
+bash scripts/setup_mac.sh
+```
+
+The helper installs backend and frontend dependencies and creates `.env` from `.env.example` (without overwriting an existing file). Enter your private Gemini key locally with `nano .env` by replacing the blank value after `GEMINI_API_KEY=`. Then run:
+
+```bash
+bash scripts/run_mac.sh
+```
+
+Open **http://localhost:5173**. Keep the Terminal window open while testing; press Ctrl+C to stop. The app reads the local `.env` file automatically, so no need to paste the key into terminal commands. Never commit `.env` or paste the real key into chat.
+
 ## Run locally
 
 Requirements: **Python 3.10+** and **Node 18+**.
@@ -43,7 +62,7 @@ Open **http://localhost:5173**. The Vite development proxy forwards `/api` to th
 
 ### Optional: real LLM-assisted follow-ups
 
-In the backend shell, **before starting Uvicorn**, set an API key using your own free-tier Gemini account:
+For macOS, the **preferred** way is to put the key in the private `.env` file created by `bash scripts/setup_mac.sh` (edit with `nano .env`). The backend loads this file automatically. Alternatively, you can set environment variables in the backend shell before starting Uvicorn:
 
 ```bash
 # macOS / Linux

@@ -212,3 +212,17 @@ def test_pdf_document_type_is_forwarded_from_api():
     text = " ".join(page.extract_text() for page in PdfReader(BytesIO(response.content)).pages)
     assert "DRAFT NOTICE OUTLINE" in text
     assert "LAWYER REVIEW REQUIRED" in text
+
+
+def test_gemini_multilingual_risk_flag_escalates(monkeypatch):
+    from backend import main
+    monkeypatch.setattr(main, "is_configured", lambda: True)
+    monkeypatch.setattr(main, "extract_case", lambda messages, language: {
+        "category": "other", "risk_flag": "criminal", "followup_question": "क्या हुआ?"})
+    response = client.post("/api/analyze", json={"messages": [{"role": "user", "content": "मेरे भाई को पुलिस ने गिरफ्तार किया"}], "language": "hi"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["needs_lawyer"] is True
+    assert data["mode"] == "guided-demo"
+    assert "qualified local lawyer" in data["assistant_message"]
+    assert data["next_steps"]

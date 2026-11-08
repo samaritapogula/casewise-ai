@@ -18,6 +18,7 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from .engine import analyze, make_draft
 from .knowledge import SOURCES, VERIFIED_ON
 from .llm import conversational_followup, is_configured
+from .workflow import extract_case, translate_guidance, practice_argument, LANGUAGES
 
 app = FastAPI(title="CaseWise AI", version="0.1.0", description="Cautious Indian civil-dispute intake demo")
 origins = [origin.strip() for origin in os.getenv("CASEWISE_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if origin.strip()]
@@ -33,7 +34,14 @@ class Request(BaseModel):
     messages: list[Message] = Field(min_length=1, max_length=25)
     category: str = "auto"
     profile: dict[str, str] = Field(default_factory=dict)
+    language: str = Field(default="en", pattern="^(en|hi|te)$")
+    document_type: str = Field(default="request", pattern="^(request|notice|complaint|reply|application)$")
+    confirmed: bool = False
     confirmed: bool = False  # Explicit user review, required for PDF generation.
+
+
+class PracticeRequest(Request):
+    argument: str = Field(min_length=10, max_length=1600)
 
 
 def as_dict(request: Request) -> list[dict]:
@@ -53,12 +61,40 @@ def get_sources():
 @app.post("/api/analyze")
 def analyze_case(request: Request):
     try:
-        data = analyze(as_dict(request), request.profile, request.category)
-        answer = conversational_followup(data, as_dict(request))
-        if answer:
+        preliminary = analyze(as_dict(request), request.profile, request.category)
+        proposed = extract_case(as_dict(request), request.language) if is_configured() and not preliminary["needs_lawyer"] else None
+        chosen = request.category
+        if chosen == "auto" and proposed and proposed["category"] != "other":
+            chosen = proposed["category"]
+        data = analyze(as_dict(request), request.profile, chosen)
+        data["summary"]["ai_extracted_case"] = proposed
+        if proposed and proposed.get("risk_flag") in ("urgent", "criminal"):
+            data["needs_lawyer"] = True
+            data["next_steps"] = ["Consult a qualified local lawyer promptly and preserve relevant dates, documents and notices."]
+            data["safety_flags"].insert(0, "Potential urgent/criminal issue flagged by AI; this prototype cannot assess it. Seek professional advice.")
+        data["languages_available"] = LANGUAGES
+        data["language"] = request.language
+        localized = translate_guidance(data["next_steps"], request.language) if not data["needs_lawyer"] else None
+        if localized:
+            data["next_steps"] = localized
+            data["translation_status"] = "AI translation for user review; official sources are unchanged."
+        if data["needs_lawyer"]:
+            answer = data["assistant_message"]
+        else:
+            answer = (proposed.get("followup_question") if proposed else None) or conversational_followup(data, as_dict(request), request.language)
+        if answer and not data["needs_lawyer"]:
             data["assistant_message"] = answer
             data["mode"] = "gemini-assisted"
         return data
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/practice")
+def rehearse(request: PracticeRequest):
+    try:
+        data = analyze(as_dict(request), request.profile, request.category)
+        return practice_argument(data, request.argument, request.language)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

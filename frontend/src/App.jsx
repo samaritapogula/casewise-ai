@@ -4,6 +4,7 @@ import CaseFilePanel from './CaseFilePanel';
 import LegalPlanPanel from './LegalPlanPanel';
 import DocumentChooser, { documentTypes } from './DocumentChooser';
 import DocumentExtraFields from './DocumentExtraFields';
+import Phase4Guidance, { ArgumentOutline } from './Phase4Guidance';
 import {
   ArrowRight, BookOpen, CheckCircle2, ChevronRight, CircleHelp, ClipboardList,
   Download, ExternalLink, FileDown, FileText, Info, Landmark, LoaderCircle,
@@ -71,6 +72,13 @@ export default function App() {
   const [reviewError, setReviewError] = useState('');
   const [draftPreview, setDraftPreview] = useState('');
   const [previewBusy, setPreviewBusy] = useState(false);
+  const [draftPreviewEdited, setDraftPreviewEdited] = useState(false);
+  const [documentGuidance, setDocumentGuidance] = useState(null);
+  const [guidanceBusy, setGuidanceBusy] = useState(false);
+  const [guidanceError, setGuidanceError] = useState('');
+  const [argumentOutline, setArgumentOutline] = useState(null);
+  const [argumentBusy, setArgumentBusy] = useState(false);
+  const [argumentError, setArgumentError] = useState('');
   const bottom = useRef(null);
   const textarea = useRef(null);
   const [caseCorrections, setCaseCorrections] = useState({});
@@ -90,7 +98,27 @@ export default function App() {
   const [planError, setPlanError] = useState('');
   const caseId = useRef('CW-' + Math.random().toString(36).slice(2, 11).toUpperCase());
   const sentMessages = messages.filter(m => m.role === 'user');
-  useEffect(() => { setDraftPreview(''); }, [draftProfile, draftFacts, documentType]);
+  useEffect(() => { setDraftPreview(''); setDraftPreviewEdited(false); }, [draftProfile, draftFacts, documentType]);
+  useEffect(() => {
+    if (!reviewOpen || !sentMessages.length) return undefined;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      setGuidanceBusy(true); setGuidanceError('');
+      try {
+        const resp = await fetch(`${API_BASE}/api/document-intelligence`, {
+          method:'POST', headers:{'Content-Type':'application/json'}, signal:controller.signal,
+          body:JSON.stringify(casePayload(messages, {document_type:documentType,
+            profile:{...draftProfile, facts_narrative:draftFacts},
+            story_override:draftFacts, reviewed:draftConfirmed})),
+        });
+        const data=await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Readiness check unavailable.');
+        if (!controller.signal.aborted) setDocumentGuidance(data);
+      } catch(err) {if (!controller.signal.aborted) setGuidanceError(err.message || 'Readiness check unavailable.');}
+      finally {if (!controller.signal.aborted) setGuidanceBusy(false);}
+    }, 350);
+    return () => {clearTimeout(timer);controller.abort();};
+  }, [reviewOpen, documentType, draftProfile, draftFacts, messages, category, draftConfirmed]);
 
   function casePayload(nextMessages = messages, other = {}) {
     return {
@@ -118,6 +146,7 @@ export default function App() {
     setPlanReviewed(false);
     setCaseError('');
     setPlanError('');
+    setArgumentOutline(null);
   }
 
   async function saveCaseEdits() {
@@ -282,6 +311,17 @@ export default function App() {
     setTranscriptInterim('');
     setVoiceError('');
   }
+  async function prepareArgument() {
+    if (!sentMessages.length || argumentBusy || analysis?.needs_lawyer) return;
+    setArgumentBusy(true); setArgumentError('');
+    try {
+      const response=await fetch(`${API_BASE}/api/argument-outline`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(casePayload(messages))});
+      const data=await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Could not build the argument outline.');
+      setArgumentOutline(data);
+    } catch(e) {setArgumentError(e.message || 'Argument outline unavailable.');}
+    finally {setArgumentBusy(false);}
+  }
   async function practice() {
     if (!sentMessages.length || analysis?.needs_lawyer || argument.trim().length < 10 || practicing) return;
     setPracticing(true); setError(''); setPracticeResult(null);
@@ -300,6 +340,7 @@ export default function App() {
     const next = [...messages, { role: 'user', content: value }];
     setCaseReviewed(false);
     setPlanReviewed(false);
+    setArgumentOutline(null);
     setMessages(next);
     setInput('');
     callAnalyze(next);
@@ -310,6 +351,7 @@ export default function App() {
   }
   function reset() {
     setMessages(initialMessages); setInput(''); setAnalysis(null); setProfile(emptyProfile);
+    setDocumentGuidance(null); setDraftPreviewEdited(false); setArgumentOutline(null); setGuidanceError(''); setArgumentError('');
     setCategory('auto'); setError(''); setTab('summary'); setReviewOpen(false); setDraftConfirmed(false);
     discardTranscription(); setMessages(initialMessages); setArgument(''); setPracticeResult(null); setDocumentType('request');
     setCaseCorrections({}); setContextCorrections({}); setCaseTimelineEdits(null); setCaseEvidenceEdits(null);
@@ -330,12 +372,26 @@ export default function App() {
     setDraftFacts(caseStory.trim() || analysis.case_file?.narrative?.text || analysis.summary.draft_facts || '');
     setDraftConfirmed(false);
     setReviewError('');
-    setDraftPreview('');
+    setDraftPreview(''); setDraftPreviewEdited(false); setDocumentGuidance(null);
     setReviewOpen(true);
   }
   const essentialFields = ['counterparty', 'location', 'event_date', 'desired_resolution'];
   const draftMissing = essentialFields.filter(key => !draftProfile[key]?.trim());
 
+  async function refreshDocumentGuidance() {
+    if (!reviewOpen) return;
+    setGuidanceBusy(true); setGuidanceError('');
+    try {
+      const resp=await fetch(`${API_BASE}/api/document-intelligence`,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(casePayload(messages, {document_type:documentType,
+          profile:{...draftProfile,facts_narrative:draftFacts},story_override:draftFacts,reviewed:draftConfirmed}))});
+      const data=await resp.json();
+      if (!resp.ok) throw new Error(data.detail || 'Could not refresh readiness.');
+      setDocumentGuidance(data);
+    } catch(e) {setGuidanceError(e.message || 'Could not refresh readiness.');}
+    finally {setGuidanceBusy(false);}
+  }
   async function previewDraft() {
     if (!sentMessages.length || previewBusy || downloading || analysis?.needs_lawyer || !draftConfirmed || draftMissing.length || !draftFacts.trim()) return;
     setPreviewBusy(true); setReviewError('');
@@ -348,19 +404,20 @@ export default function App() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.detail || 'Could not preview this draft.');
-      setDraftPreview(result.draft || '');
+      setDraftPreview(result.draft || ''); setDraftPreviewEdited(false);
     } catch(err) { setReviewError(err.message || 'Could not preview this draft.'); }
     finally { setPreviewBusy(false); }
   }
 
   async function downloadDraft() {
-    if (!sentMessages.length || downloading || analysis?.needs_lawyer || !draftConfirmed || draftMissing.length || !draftFacts.trim()) return;
+    if (!sentMessages.length || downloading || analysis?.needs_lawyer || !draftConfirmed || draftMissing.length || !draftFacts.trim() || !draftPreview.trim()) return;
     setDownloading(true); setError(''); setReviewError('');
     try {
       const safeProfile = { ...draftProfile, facts_narrative: draftFacts };
       const response = await fetch(`${API_BASE}/api/draft`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, category, profile: safeProfile, confirmed: true, document_type: documentType }),
+        body: JSON.stringify({ messages, category, profile: safeProfile, confirmed: true, document_type: documentType,
+          edited_draft: draftPreviewEdited ? draftPreview : '' }),
       });
       if (!response.ok) {
         const details = await response.json();
@@ -450,6 +507,7 @@ export default function App() {
               <div className="section-block"><h2>Official starting points</h2><div className="source-list">{analysis.sources.map(src => <a key={src.id} href={src.url} target="_blank" rel="noopener noreferrer"><span className="source-icon"><Landmark size={16}/></span><span><strong>{src.title}</strong><small>{src.description}</small></span><ExternalLink size={14}/></a>)}</div><p className="source-caveat">{analysis.source_status}</p></div>
               <div className="safety-card"><ShieldAlert size={17}/><div><strong>Know the limits</strong>{analysis.safety_flags.map((flag,i) => <p key={i}>{flag}</p>)}</div></div>
               <DocumentChooser onChoose={openDraftReview} disabled={downloading || analysis.needs_lawyer || busy} recommendations={analysis.legal_plan?.document_recommendations}/>
+              <ArgumentOutline outline={argumentOutline} loading={argumentBusy} error={argumentError} onGenerate={prepareArgument}/>
               <div className="practice-card"><h2><MessageSquareText size={16}/> Practise your argument</h2><p>Try explaining your side. CaseWise AI will ask a respectful opposing-side question and suggest improvements. Not a prediction.</p><textarea maxLength={1600} rows={3} value={argument} onChange={e => setArgument(e.target.value)} placeholder="My position is... The evidence is..."/><button onClick={practice} disabled={!sentMessages.length || analysis.needs_lawyer || argument.trim().length < 10 || practicing}>{practicing ? 'Thinking...' : 'Practise with AI'}</button>{practiceResult && <div className="practice-result"><strong>Other side might ask</strong><p>{practiceResult.opponent_question}</p><strong>How to improve your argument</strong><p>{practiceResult.feedback}</p><small>{practiceResult.mode === 'guided-demo' ? 'Offline demo feedback' : 'Gemini-assisted practice; verify details'}</small></div>}</div>
             </>}
           </> : tab === 'plan' ? <LegalPlanPanel plan={analysis?.legal_plan}
@@ -485,18 +543,19 @@ export default function App() {
           </div>
           <DocumentExtraFields type={documentType} values={draftProfile}
             onChange={(key,value)=>{setDraftProfile(prev=>({...prev,[key]:value}));setDraftConfirmed(false);}}/>
+          <Phase4Guidance guidance={documentGuidance} loading={guidanceBusy} error={guidanceError} onRefresh={refreshDocumentGuidance}/>
           {draftMissing.length > 0 && <p className="review-alert"><ShieldAlert size={16}/> Complete {draftMissing.map(key => fieldConfig.find(([k]) => k === key)?.[1]).join(', ')} before generating. If a date is genuinely unknown, write “Not known” rather than guessing.</p>}
           <label className="review-confirm"><input type="checkbox" checked={draftConfirmed} onChange={e => setDraftConfirmed(e.target.checked)}/> <span>I have reviewed the narrative and confirmed the details I supplied. I understand this is a preliminary draft, not an official filing, and must be checked before use.</span></label>
           {draftPreview && <section className="draft-preview-panel" aria-label="Generated draft preview">
-            <div><strong>Generated {documentTypes.find(d=>d.value===documentType)?.label || 'document'} — text preview</strong><small>Read this draft carefully. Change the facts above and regenerate if needed.</small></div>
-            <pre>{draftPreview}</pre>
+            <div><strong>Generated {documentTypes.find(d=>d.value===documentType)?.label || 'document'} — editable text preview</strong><small>Edit this draft before exporting. After editing, review and confirm it again; user-edited text is not legally validated.</small></div>
+            <textarea className="draft-preview-editor" aria-label="Editable generated draft text" rows={13} maxLength={11000} value={draftPreview} onChange={e=>{setDraftPreview(e.target.value);setDraftPreviewEdited(true);setDraftConfirmed(false);}}/>
           </section>}
           {reviewError && <p className="review-alert" role="alert">{reviewError}</p>}
         </div>
         <div className="review-actions">
           <button type="button" className="review-cancel" onClick={() => setReviewOpen(false)} disabled={downloading}>Cancel</button>
           <button type="button" className="review-preview" onClick={previewDraft} disabled={previewBusy || downloading || !draftConfirmed || draftMissing.length > 0 || !draftFacts.trim()}>{previewBusy ? <LoaderCircle size={16} className="spin"/> : <FileText size={16}/>} Generate text preview</button>
-          <button type="button" className="review-download" onClick={downloadDraft} disabled={downloading || previewBusy || !draftConfirmed || draftMissing.length > 0 || !draftFacts.trim()}>{downloading ? <LoaderCircle size={16} className="spin"/> : <Download size={16}/>} Download {documentTypes.find(d=>d.value===documentType)?.label || 'draft'} PDF</button>
+          <button type="button" className="review-download" onClick={downloadDraft} disabled={downloading || previewBusy || !draftConfirmed || draftMissing.length > 0 || !draftFacts.trim() || !draftPreview.trim()}>{downloading ? <LoaderCircle size={16} className="spin"/> : <Download size={16}/>} Download {documentTypes.find(d=>d.value===documentType)?.label || 'draft'} PDF</button>
         </div>
       </section>
     </div>}

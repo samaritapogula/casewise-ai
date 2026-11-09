@@ -274,3 +274,14 @@ cd frontend && npm test && npm run build
 \`\`\`
 
 Use **fresh case examples from each supported category** and compare the Action plan tab after each new answer. Check that the same case reference is retained, that the plan changes stages, that reported evidence is not duplicated, and that both case and action-plan PDFs reflect the latest facts. As before, cases live only in the current browser session.
+
+
+## Phase 4 — document and argument intelligence
+
+The existing five draft types (resolution request, legal notice outline, complaint, reply, and assistance application) now share a **document-specific readiness checker**. In the document review dialog, the app shows which required details are present, what is still missing, warnings about legal review, and a trace of reported facts back to chat messages and any user-mentioned evidence. Reported source references do **not** verify authenticity or legal sufficiency.
+
+**Workflow:** describe the dispute → review the structured Case File → choose a document → complete purpose-specific questions → confirm the factual account → generate text preview → optionally edit the whole draft → confirm again → download the reviewed PDF. If the draft text was edited, the PDF carries an additional mandatory disclaimer; edits are not independently legally validated. The preview does not send or file any communication.
+
+The **Prepare your factual argument** panel creates a neutral opening, reported key points, possible challenges, questions needing clarification, and closing wording directly from the case file. The existing practice chatbot remains available. No guaranteed outcomes, invented citations, unverified documents, or formal legal filings are produced. Urgent/criminal triggers retain the existing draft and argument restrictions. English-only and no default server-side case persistence continue to apply.
+
+Phase 4 is an educational prototype; legal deadlines, current law, recipient, venue, procedure, evidence and eligibility must be confirmed independently by qualified professionals or official sources before real-world use.

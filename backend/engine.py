@@ -181,6 +181,12 @@ def make_draft(messages: list[dict[str, str]], profile: dict[str, Any] | None = 
     sender = clean((profile or {}).get("sender_name"), 160) or "[Your full name]"
     contact = clean((profile or {}).get("sender_contact"), 180) or "[Your contact information]"
     counterparty = facts["counterparty"]
+    chosen_recipient = clean((profile or {}).get("recipient_name"), 180)
+    office_document = document_type in {"complaint", "application"}
+    recipient = chosen_recipient or (
+        "[Relevant office or authority - verify before use]"
+        if office_document else counterparty
+    )
     location = facts["location"]
     amount = facts["amount"].replace("₹", "INR ")
     event_date = facts["event_date"]
@@ -202,7 +208,8 @@ def make_draft(messages: list[dict[str, str]], profile: dict[str, Any] | None = 
         "",
         f"From: {sender}",
         f"Contact: {contact}",
-        f"To: {counterparty}",
+        f"To: {recipient}",
+        *( [f"Party concerned: {counterparty}"] if office_document else [] ),
         f"City / State: {location}",
         "Date prepared: [Add the date on which you send this letter]",
         "",

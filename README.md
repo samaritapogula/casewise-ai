@@ -217,3 +217,12 @@ cd frontend && npm test && npm run build
 \`\`\`
 
 **Legal safety:** This app does not verify that a law is applicable, that a user qualifies for a particular remedy or forum, or that a document is ready for filing. It must never invent a limitation period, venue or guaranteed outcome. Official government links can change, and live legal advice, deadlines and case-sensitive procedure require a qualified professional.
+
+
+## Timeline quality and explicit document choices (November 2026)
+
+**Timeline:** Phase 2 no longer treats every user sentence as an event. It retains user-reported *actions and incidents* (payments, move-outs, complaints, refusals, missed payments and similar events) but excludes mere evidence lists, requests for relief, and short answers giving names or other field values. When all reported event dates are precise, entries are sorted chronologically. If some dates are unknown, their original conversation order is preserved; no date is invented. The user can still edit, add or remove events before PDF/JSON export. When no genuine events are identified, the timeline remains empty instead of inventing AI events.
+
+**Document choices:** The Overview and Action plan tabs now display five direct draft choices: **Resolution request**, **Legal notice outline**, **Complaint draft**, **Reply draft**, and **Application for assistance**. Choosing one opens the pre-existing fact-review dialog with that type selected. The recipient may be edited separately; complaint and application drafts use a neutral unverified authority placeholder rather than assuming the counterparty is the recipient. These are *drafts*, never official submissions. Urgent/criminal intake and reviewed-facts constraints remain enforced by the backend.
+
+**Test:** Enter the fictional ₹30,000 rental-deposit example, answer the other-party question with a name, then check that the timeline includes payment of deposit, move-out date and non-return—not the name, requested outcome or evidence list. Download the reviewed Case File PDF/JSON; then choose a document type and review its recipient and text before generating.

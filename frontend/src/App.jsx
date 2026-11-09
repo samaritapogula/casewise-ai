@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createContinuousSpeech } from './continuousSpeech';
 import CaseFilePanel from './CaseFilePanel';
 import LegalPlanPanel from './LegalPlanPanel';
+import DocumentChooser, { documentTypes } from './DocumentChooser';
 import {
   ArrowRight, BookOpen, CheckCircle2, ChevronRight, CircleHelp, ClipboardList,
   Download, ExternalLink, FileDown, FileText, Info, Landmark, LoaderCircle,
@@ -18,7 +19,6 @@ const options = [
   { value: 'contract', label: 'Contract & payments', icon: FileText },
 ];
 const DEFAULT_WELCOME = "Hello! I'm CaseWise AI. Describe an everyday civil dispute in your own words. I'll help organize the facts and ask about missing details.";
-const documentTypes = [{value:'request',label:'Resolution request'}, {value:'notice',label:'Notice outline (lawyer review)'}, {value:'complaint',label:'Complaint draft'}, {value:'reply',label:'Reply draft'}, {value:'application',label:'Application for assistance'}];
 const fieldConfig = [
   ['location', 'City / state', 'e.g. Kanpur, Uttar Pradesh'],
   ['counterparty', 'Other party', 'e.g. landlord / company'],
@@ -312,14 +312,15 @@ export default function App() {
     setCompletedActions({}); setPlanReviewed(false); setPlanError('');
     caseId.current = 'CW-' + Math.random().toString(36).slice(2, 11).toUpperCase();
   }
-  function openDraftReview() {
+  function openDraftReview(chosenType = 'request') {
     if (!analysis || analysis.needs_lawyer || busy) return;
+    setDocumentType(documentTypes.some(item => item.value === chosenType) ? chosenType : 'request');
     const autoFields = analysis.profile_used || {};
     const caseFacts = analysis.case_file?.facts || {};
     const corrected = Object.fromEntries(fieldConfig.map(([key]) => [
       key, profile[key]?.trim() || caseFacts[key]?.value || autoFields[key] || '',
     ]));
-    setDraftProfile({ ...emptyProfile, ...autoFields, ...corrected, sender_name: '', sender_contact: '' });
+    setDraftProfile({ ...emptyProfile, ...autoFields, ...corrected, sender_name: '', sender_contact: '', recipient_name: '' });
     setDraftFacts(caseStory.trim() || analysis.case_file?.narrative?.text || analysis.summary.draft_facts || '');
     setDraftConfirmed(false);
     setReviewError('');
@@ -414,7 +415,7 @@ export default function App() {
               <div className="section-block"><div className="section-header"><h2>Information still needed</h2><button className="inline-button" onClick={() => setTab('details')}>Add details <ChevronRight size={13}/></button></div>{analysis.case_file?.missing?.length ? <div className="missing-tags">{analysis.case_file.missing.map(v => <span key={v.key}>{v.label}</span>)}</div> : <p className="small-success"><CheckCircle2 size={15}/> Case-builder checklist complete. Facts and law still need checking.</p>}</div>
               <div className="section-block"><h2>Official starting points</h2><div className="source-list">{analysis.sources.map(src => <a key={src.id} href={src.url} target="_blank" rel="noopener noreferrer"><span className="source-icon"><Landmark size={16}/></span><span><strong>{src.title}</strong><small>{src.description}</small></span><ExternalLink size={14}/></a>)}</div><p className="source-caveat">{analysis.source_status}</p></div>
               <div className="safety-card"><ShieldAlert size={17}/><div><strong>Know the limits</strong>{analysis.safety_flags.map((flag,i) => <p key={i}>{flag}</p>)}</div></div>
-              <div className="draft-card"><div className="draft-icon"><FileDown size={20}/></div><div><strong>Prepare a document</strong><p>Choose a request, notice outline, complaint, reply or application. Review every fact before creating a PDF.</p></div><button disabled={downloading || analysis.needs_lawyer || busy} onClick={openDraftReview}><ClipboardList size={16}/> Review &amp; generate PDF</button></div>
+              <DocumentChooser onChoose={openDraftReview} disabled={downloading || analysis.needs_lawyer || busy}/>
               <div className="practice-card"><h2><MessageSquareText size={16}/> Practise your argument</h2><p>Try explaining your side. CaseWise AI will ask a respectful opposing-side question and suggest improvements. Not a prediction.</p><textarea maxLength={1600} rows={3} value={argument} onChange={e => setArgument(e.target.value)} placeholder="My position is... The evidence is..."/><button onClick={practice} disabled={!sentMessages.length || analysis.needs_lawyer || argument.trim().length < 10 || practicing}>{practicing ? 'Thinking...' : 'Practise with AI'}</button>{practiceResult && <div className="practice-result"><strong>Other side might ask</strong><p>{practiceResult.opponent_question}</p><strong>How to improve your argument</strong><p>{practiceResult.feedback}</p><small>{practiceResult.mode === 'guided-demo' ? 'Offline demo feedback' : 'Gemini-assisted practice; verify details'}</small></div>}</div>
             </>}
           </> : tab === 'plan' ? <LegalPlanPanel plan={analysis?.legal_plan}
@@ -422,6 +423,7 @@ export default function App() {
     reviewed={planReviewed} onReviewed={setPlanReviewed}
     onExport={downloadLegalPlan} exporting={planExporting} error={planError}
     onRefresh={refreshLegalPlan} refreshing={busy}
+    onChooseDocument={openDraftReview} documentsDisabled={downloading || analysis?.needs_lawyer || busy}
   /> : tab === 'details' ? <div className="details-tab"><div className="panel-topline">OPTIONAL FACT CHECK</div><h2>Complete your case details</h2><p>Add only details you're comfortable sharing. These fields are used to create a clearer summary and draft letter.</p><div className="profile-fields">{fieldConfig.map(([key,label,hint]) => <label key={key}>{label}<input value={profile[key]} maxLength={250} placeholder={hint} onChange={e => {markCaseChanged();setProfile(p => ({ ...p, [key]: e.target.value }));}}/></label>)}</div><button className="update-button" disabled={!sentMessages.length || busy} onClick={async () => { await callAnalyze(messages, false); setTab('summary'); }}>Update case overview <ArrowRight size={16}/></button><p className="privacy-note"><ShieldCheck size={15}/> Case text is not intentionally saved on the server. If Gemini is configured, conversational inputs are sent to its API.</p></div> : <CaseFilePanel mode={tab} file={analysis?.case_file}
     profile={profile} onProfile={(key,value)=>{markCaseChanged();setProfile(p=>({...p,[key]:value}));}}
     corrections={caseCorrections} onCorrection={(key,value)=>{markCaseChanged();setCaseCorrections(p=>({...p,[key]:value}));}}
@@ -437,14 +439,17 @@ export default function App() {
     </main>
     {reviewOpen && <div className="review-overlay" role="presentation" onMouseDown={e => { if (e.target === e.currentTarget && !downloading) setReviewOpen(false); }}>
       <section className="review-dialog" role="dialog" aria-modal="true" aria-labelledby="review-heading">
-        <div className="review-top"><div><span className="panel-topline">BEFORE YOU DOWNLOAD</span><h2 id="review-heading">Review your document draft</h2><p>Information suggested by the chat may be incomplete. Correct any facts below. The draft is a factual request, not a formal legal notice.</p></div><button type="button" className="review-close" aria-label="Close review" onClick={() => setReviewOpen(false)} disabled={downloading}><X size={19}/></button></div>
+        <div className="review-top"><div><span className="panel-topline">BEFORE YOU DOWNLOAD</span><h2 id="review-heading">Review your document draft</h2><p>Information suggested by the chat may be incomplete. Correct any facts below. This is an editable draft, not a formal notice or official filing.</p></div><button type="button" className="review-close" aria-label="Close review" onClick={() => setReviewOpen(false)} disabled={downloading}><X size={19}/></button></div>
         <div className="review-body">
           <label className="review-label">Choose document type<select className="doc-type-select" value={documentType} onChange={e=>{setDocumentType(e.target.value);setDraftConfirmed(false)}}>{documentTypes.map(d=><option key={d.value} value={d.value}>{d.label}</option>)}</select><small>All options create a draft for review, never an official filing. Notice and reply drafts need legal review.</small></label>
           <label className="review-label">Your factual account (editable)<textarea rows={5} maxLength={1200} value={draftFacts} onChange={e => { setDraftFacts(e.target.value); setDraftConfirmed(false); }}/><small>PDF drafts are currently in English. Check any AI-suggested narrative, remove questions or unverified claims, and confirm wording before downloading.</small></label>
           <div className="review-grid">{fieldConfig.map(([key,label,hint]) => <label className="review-label" key={key}>{label}{essentialFields.includes(key) && <span className="field-required"> Required</span>}<input value={draftProfile[key] || ''} maxLength={250} placeholder={hint} onChange={e => { setDraftProfile(p => ({ ...p, [key]: e.target.value })); setDraftConfirmed(false); }}/></label>)}</div>
-          <div className="review-grid">{[['sender_name','Your name (optional)'],['sender_contact','Your contact details (optional)']].map(([key,label]) => <label className="review-label" key={key}>{label}<input value={draftProfile[key] || ''} maxLength={180} placeholder="Leave blank to use a placeholder" onChange={e => { setDraftProfile(p => ({ ...p, [key]: e.target.value })); setDraftConfirmed(false); }}/></label>)}</div>
+          <div className="review-grid">
+            <label className="review-label">Intended recipient / authority (optional)<input value={draftProfile.recipient_name || ''} maxLength={180} placeholder={documentType === 'complaint' || documentType === 'application' ? 'e.g. relevant office or organization' : 'e.g. person or business'} onChange={e => {setDraftProfile(p=>({...p,recipient_name:e.target.value}));setDraftConfirmed(false);}}/><small>For complaints and applications, verify the appropriate office before submitting. Leave blank for a placeholder.</small></label>
+            {[['sender_name','Your name (optional)'],['sender_contact','Your contact details (optional)']].map(([key,label]) => <label className="review-label" key={key}>{label}<input value={draftProfile[key] || ''} maxLength={180} placeholder="Leave blank to use a placeholder" onChange={e => { setDraftProfile(p => ({ ...p, [key]: e.target.value })); setDraftConfirmed(false); }}/></label>)}
+          </div>
           {draftMissing.length > 0 && <p className="review-alert"><ShieldAlert size={16}/> Complete {draftMissing.map(key => fieldConfig.find(([k]) => k === key)?.[1]).join(', ')} before generating. If a date is genuinely unknown, write “Not known” rather than guessing.</p>}
-          <label className="review-confirm"><input type="checkbox" checked={draftConfirmed} onChange={e => setDraftConfirmed(e.target.checked)}/> <span>I have reviewed the narrative and confirmed the details I supplied. I understand this is a preliminary letter and must be checked before sending.</span></label>
+          <label className="review-confirm"><input type="checkbox" checked={draftConfirmed} onChange={e => setDraftConfirmed(e.target.checked)}/> <span>I have reviewed the narrative and confirmed the details I supplied. I understand this is a preliminary draft, not an official filing, and must be checked before use.</span></label>
           {reviewError && <p className="review-alert" role="alert">{reviewError}</p>}
         </div>
         <div className="review-actions"><button type="button" className="review-cancel" onClick={() => setReviewOpen(false)} disabled={downloading}>Cancel</button><button type="button" className="review-download" onClick={downloadDraft} disabled={downloading || !draftConfirmed || draftMissing.length > 0 || !draftFacts.trim()}>{downloading ? <LoaderCircle size={16} className="spin"/> : <Download size={16}/>} Generate reviewed PDF</button></div>

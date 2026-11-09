@@ -1,8 +1,10 @@
 import React from 'react';
 import { AlertTriangle, BookOpen, CheckCircle2, ClipboardCheck, Download, ExternalLink, Scale, ShieldAlert } from 'lucide-react';
+import DocumentChooser from './DocumentChooser';
 
 export default function LegalPlanPanel({
   plan, checked, onCheck, reviewed, onReviewed, onExport, exporting, error, onRefresh, refreshing,
+  onChooseDocument, documentsDisabled,
 }) {
   if (!plan) return <section className="legal-plan"><div className="case-heading"><h2>Your personalized action plan</h2><p>Describe a fictional civil dispute to generate source-linked general guidance.</p></div></section>;
   const completeCount = plan.actions.filter(a => checked[a.id] === true).length;
@@ -72,6 +74,7 @@ export default function LegalPlanPanel({
         <ul>{plan.escalation.reasons.map((reason,i)=><li key={i}>{reason}</li>)}</ul>
       </div>
     </div>
+    {onChooseDocument && <DocumentChooser onChoose={onChooseDocument} disabled={documentsDisabled} />}
     <div className="legal-export">
       <label><input type="checkbox" checked={reviewed} onChange={e=>onReviewed(e.target.checked)}/>
         <span>I have reviewed this informational action plan. I understand that source links do not prove legal applicability and this PDF is not ready for filing.</span>

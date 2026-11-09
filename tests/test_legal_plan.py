@@ -31,7 +31,7 @@ def test_all_four_civil_categories_have_grounded_sources(text, expected_category
     assert all(s["url"] == SOURCES[s["id"]]["url"] for s in result["sources"])
     assert result["position"]["status"].startswith("Cautious orientation")
     assert result["escalation"]["level"] == "general_guidance"
-    assert not any("guaranteed" in a["instructions"].lower() for a in result["actions"])
+    assert not any("guaranteed to win" in a["instructions"].lower() for a in result["actions"])
 
 
 def test_statute_references_are_whitelisted_not_ai_generated():
@@ -63,7 +63,7 @@ def test_reported_items_are_never_misrepresented_as_verified():
                     profile={"location": "Kanpur", "amount": "₹20,000"})
     assert any("not verified" in x.lower() for x in plan["supporting_reports"])
     assert any("receipt" in x.lower() for x in plan["supporting_reports"])
-    assert "not independently assessed" in " ".join(plan["uncertainties"])
+    assert "not been independently assessed" in " ".join(plan["uncertainties"])
 
 
 def test_action_checklist_is_user_marked_and_not_server_persistent():

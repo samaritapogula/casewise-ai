@@ -4,26 +4,24 @@
 
 CaseWise AI is a **demonstration, not a lawyer**. It never guarantees outcomes, sets legal deadlines, or invents statutes. State-specific property and employment rules are intentionally not summarized as universal national law.
 
-## Multilingual case-building workflow (November 2026 upgrade)
+## English case-building and voice typing
 
-- **Text:** English, Hindi, Telugu, Tamil, Bengali and Marathi are available using the language switcher. Gemini can suggest an English case narrative, dated events, explicitly mentioned proof, missing facts and a follow-up question. Every extracted detail is **unverified until the user reviews it**. Without Gemini, the app still runs in basic English guided mode; full multilingual understanding is not guaranteed.
-- **Voice input:** The microphone uses the browser's SpeechRecognition / webkitSpeechRecognition implementation. Language tags are en-IN, hi-IN, te-IN, ta-IN, bn-IN and mr-IN. Browser compatibility and language availability vary; some browsers send microphone audio to their recognition service. Recognized speech appears first in a separate **review panel**. The user can edit, discard or add the transcription to their text message. Nothing is submitted to the backend until the user presses **Send**. Voice recognition is not a separately hosted transcription service.
-- **Continuous dictation:** Pause naturally between sentences; the app uses `continuous=true` and reconnects after browser session endings until **Stop recording** is pressed. Spoken segments accumulate in one editable transcript. A browser can still block recognition, refuse an automatic restart or impose limits; in those cases the app gives an error and retains recognized text for review. Microphone recordings are never sent to the chat automatically. Run `cd frontend && npm test` for regression tests.
-- **Where the user stands:** The app distinguishes reported facts from uncertain information. It offers cautious general options and official starting points, not eligibility determinations or predictions.
-- **Documents:** The review form lets a user choose a factual request, proposed notice outline, complaint, reply, or application. Every PDF is clearly labelled as a **draft**, never a formal legal notice or filing. The PDF templates are English-only, require an English narrative, missing fields, and explicit review confirmation; any formal notice/reply should be reviewed by a lawyer.
-- **Argument practice:** `/api/practice` challenges a user with a factual opposing-side question and offers evidence-focused feedback. It never estimates odds of winning or fabricates precedents. In offline mode it uses a generic practice prompt.
-- **Limits:** A Gemini key activates the language features but does not guarantee accuracy. Multilingual and voice quality have not been validated across all browsers or Indian dialects. The legal sources are curated navigation links rather than live authoritative conclusions. Do not enter sensitive identifying information during testing.
+- **Language:** CaseWise AI operates in English. The language selector and experimental translations have been removed because voice transcription was unreliable in testing.
+- **Text:** Type your civil-dispute story directly in English. Gemini may propose a case narrative, timeline, proof checklist, missing details and a follow-up question. Review all AI-extracted facts before relying on them.
+- **Voice:** Dictation is set to English (India, `en-IN`) using the browser's SpeechRecognition / webkitSpeechRecognition API. Click the microphone, speak naturally, then press **Stop recording**. Short pauses should not intentionally end dictation; the client attempts to reconnect if a browser recognition session ends. Browser limits may still interrupt recording.
+- **Transcription review:** Recognition output appears in a separate editable review panel. You must select **Add to message for review**, then manually press **Send**. Audio may be processed by the browser's speech provider; this application does not intentionally store audio.
+- **Existing legal support:** Structured case summary, fact checking, source-linked general steps, reviewed PDF draft types, and argument practice remain available. The product is not a substitute for a lawyer, and sources are starting points rather than claims of verified entitlement.
+- **Testing:** `cd frontend && npm test` runs continuous-dictation checks. `python -m pytest -q` covers backend behavior. These tests do not establish speech-recognition accuracy or legal correctness.
 
-To try the enhanced interface after pulling the latest code on macOS:
+To use the updated app on macOS, stop the current process with Control+C and run:
 
 ```bash
 cd ~/Desktop/casewise-ai
-git pull origin main
-bash scripts/setup_mac.sh
+git pull --ff-only origin main
 bash scripts/run_mac.sh
 ```
 
-Use the language picker and microphone in the chat. **Review the transcription before adding it to the composer, then press Send manually.** After sharing a case, review the **Structured case file**, select a document type in the PDF review dialog, or try **Practise your argument**. Check browser microphone permissions if dictation is unavailable.
+Open http://localhost:5173, try an English test case, and review the voice transcription before sending.
 
 ## What works
 
@@ -32,7 +30,7 @@ Use the language picker and microphone in the chat. **Review the transcription b
 - Safe source links to India Code, NALSA, NCH, e-Jagriti and Chief Labour Commissioner
 - A downloadable **PDF factual request for resolution**, generated after user fact review and confirmation (not a formal legal notice)
 - Safety alerts for urgent/criminal matters, with document generation blocked in those cases
-- Optional Gemini-assisted **multilingual intake, structured case extraction and factual argument practice** with a configurable provider and model
+- Optional Gemini-assisted **English intake, structured case extraction and factual argument practice** with a configurable provider and model
 - Fully functional, deterministic **guided-demo** mode without any API key
 - No database / no intentional server-side case persistence
 
@@ -76,7 +74,7 @@ $env:GEMINI_API_KEY='your-key-here'
 $env:GEMINI_MODEL='gemini-2.5-flash'
 ```
 
-No key is required for the guided demo. With a key, user conversation snippets are sent to the external Gemini API. The language model proposes **unverified structured case facts, multilingual intake wording, optional translations, and argument practice**; fixed rules retain source-linked next steps and safety conditions. Never treat model text as verified law. If the API fails, the app falls back gracefully. **Do not put the API key in React/Vite or commit it to GitHub.**
+No key is required for the guided demo. With a key, user conversation snippets are sent to the external Gemini API. The language model proposes **unverified structured case facts, English intake wording, and argument practice**; fixed rules retain source-linked next steps and safety conditions. Never treat model text as verified law. If the API fails, the app falls back gracefully. **Do not put the API key in React/Vite or commit it to GitHub.**
 
 For a separately hosted frontend, set `VITE_API_BASE_URL=https://your-backend-host` in `frontend/.env.local` before building. In the backend configure `CASEWISE_ALLOWED_ORIGINS=https://your-frontend-host`. Hosting the frontend on Vercel does **not** automatically host FastAPI; deploy both services or use a Python-capable host for the backend.
 
@@ -131,7 +129,7 @@ Reuses the **React + FastAPI architecture and explanation-oriented interaction d
 3. Location/date/amount detection is incomplete; users should review the case details panel, and dates or missing information may remain unknown.
 4. India-specific legal remedies and deadlines depend on jurisdiction, case facts, and changes to law. A lawyer must verify before filing.
 5. PDF drafts can contain user allegations; they are preliminary factual letters, not legal notices ready for court filing. The frontend currently offers PDF download rather than a WYSIWYG editor.
-6. No persistent chat history, uploaded document analysis, authentication, speech audio storage, or formal case prediction. Speech recognition depends on browser availability; six-language Gemini output is best-effort and not equivalent to complete translation/localization.
+6. No persistent chat history, uploaded document analysis, authentication, speech audio storage, or formal case prediction. Speech recognition depends on browser availability and may not capture spoken English reliably in every accent or device.
 
 ## Assignment integrity
 
@@ -141,12 +139,12 @@ The earlier legal-outcome predictor was a joint project and is referenced for ar
 
 This repo contains only synthetic test examples and published official URLs. **Do not** commit real case documents, personal details, or private API keys.
 
-## Phase 1 — Multilingual voice testing checklist
+## English voice-input test checklist
 
-1. Select one of English, Hindi, Telugu, Tamil, Bengali, Marathi. The initial welcome message changes before a conversation begins.
-2. Click the microphone and grant browser permission. Speak a **fictional** dispute. Preview/edit the recognized text, select **Add to message for review**, inspect it in the regular composer, then press **Send**.
-3. Confirm Gemini's follow-up uses the selected language when the API succeeds. Structured source references and reviewed PDF templates remain in English; the app flags unverified AI translations and falls back to English guidance if translation fails.
-4. Test denied microphone permission and a browser without SpeechRecognition; text input should still work.
-5. Browser recognition may transmit audio to the browser/provider's external speech service. This app does not intentionally save raw audio. Do not dictate real identifying details in the demonstration.
+1. Open the app, click the microphone, and speak a **fictional English** civil-dispute description.
+2. Pause between sentences, then press **Stop recording** and review the accumulated text.
+3. Edit the transcript as needed; choose **Add to message for review** and manually select **Send**.
+4. Verify Gemini responds in English. Check the structured case file, document review and argument practice.
+5. Also test microphone permission denied or speech service unavailable. Text entry must continue working.
 
-Browser Web Speech availability is limited and individual language packs cannot be guaranteed (MDN: https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition). Do not claim a voice language has been fully tested without trying it on the target device.
+Browser speech recognition can rely on an external browser speech provider and may have availability/time limits. See the [SpeechRecognition API](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition).

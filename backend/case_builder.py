@@ -503,6 +503,16 @@ def build_case(
     # because the question has already appeared in the chat.
     next_field = next((key for key in ordered_missing if key not in asked),
                       ordered_missing[0] if ordered_missing else None)
+    # Keep clarifying the *just-answered* date before switching subjects.
+    # Otherwise the next reply could be mistakenly treated as evidence or
+    # another field while the user is still explaining a partial date.
+    recent_date_answer = (
+        len(messages) >= 2 and messages[-1].get("role") == "user"
+        and messages[-2].get("role") == "assistant"
+        and match_primary_question(messages[-2].get("content"), QUESTIONS) == "event_date"
+    )
+    if recent_date_answer and date_review and date_review["status"] != "accepted" and "event_date" in unanswered:
+        next_field = "event_date"
     question = QUESTIONS.get(next_field)
     if next_field == "event_date" and central_event:
         # Ask about the actual disputed event instead of silently equating

@@ -415,3 +415,30 @@ def test_cross_category_direct_date_reply_reuses_undated_event(category_story, a
     assert case["facts"]["event_date"]["value"] == expected_date
     assert len([row for row in case["timeline"] if row["event_kind"] == "event"]) == 1
     assert case["timeline"][0]["date"] == expected_date
+
+
+
+@pytest.mark.parametrize("document_type", ("request", "notice", "complaint", "reply", "application"))
+def test_standard_length_draft_uses_compact_non_orphaned_pdf_layout(document_type):
+    payload = {
+        "messages": user(BUYER_STORY),
+        "category": "consumer",
+        "confirmed": True,
+        "document_type": document_type,
+        "profile": {
+            "counterparty": "TechZone Electronics",
+            "location": "Hyderabad, Telangana",
+            "event_date": "21 October 2026",
+            "amount": "₹55,000",
+            "evidence": "invoice, receipt, email",
+            "desired_resolution": "a full refund",
+            "facts_narrative": BUYER_STORY,
+        },
+    }
+    result = client.post("/api/draft", json=payload)
+    assert result.status_code == 200, result.text
+    pages = PdfReader(BytesIO(result.content)).pages
+    assert len(pages) == 1, (document_type, len(pages))
+    words = pages[0].extract_text()
+    assert "REVIEW BEFORE SENDING" in words
+    assert "TechZone Electronics" in words

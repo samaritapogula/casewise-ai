@@ -25,6 +25,7 @@ from .case_builder import build_case
 from .case_export import case_as_json, case_as_pdf
 from .legal_plan import build_legal_plan
 from .action_plan_export import as_pdf as action_plan_pdf
+from .phase4 import build_document_intelligence, build_argument_outline
 
 app = FastAPI(title="CaseWise AI", version="0.1.0", description="Cautious Indian civil-dispute intake demo")
 origins = [origin.strip() for origin in os.getenv("CASEWISE_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if origin.strip()]
@@ -56,6 +57,7 @@ class Request(BaseModel):
     export_format: str = Field(default="pdf", pattern="^(pdf|json)$")
     completed_actions: dict[str, bool] = Field(default_factory=dict, max_length=16)
     plan_reviewed: bool = False
+    edited_draft: str = Field(default="", max_length=11000)  # User-edited draft; used only after confirmation.
 
 
 class PracticeRequest(Request):
@@ -182,6 +184,26 @@ def export_legal_plan(request: Request):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@app.post("/api/document-intelligence")
+def document_intelligence(request: Request):
+    """Show document-specific missing details and source-linked reported facts."""
+    try:
+        case = build_case_from_request(request, request.ai_suggestion)
+        return build_document_intelligence(case, request.document_type, request.profile)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/argument-outline")
+def argument_outline(request: Request):
+    """Generate a grounded factual speaking outline from the existing case file."""
+    try:
+        case = build_case_from_request(request, request.ai_suggestion)
+        return build_argument_outline(case)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 @app.post("/api/practice")
 def rehearse(request: PracticeRequest):
     try:
@@ -222,6 +244,17 @@ def make_pdf(request: Request):
         draft_text = make_draft(as_dict(request), request.profile, request.category, confirmed=request.confirmed, document_type=request.document_type)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if request.edited_draft.strip():
+        # The user is responsible for any substantive changes to the generated
+        # draft. The app does not certify edited text and cannot remove its
+        # permanent review notice.
+        draft_text = (
+            "CASEWISE AI | USER-EDITED PRELIMINARY DRAFT\n"
+            "User-edited wording has not been independently validated. Not a court filing or formal legal notice.\n\n"
+            + request.edited_draft.strip()
+            + "\n\nREVIEW BEFORE SENDING: Confirm facts, dates, recipient, evidence, applicable law and procedure. "
+            "Seek qualified professional review. This is not legal advice or an official filing."
+        )
     result = BytesIO()
     doc = SimpleDocTemplate(result, pagesize=A4, topMargin=40, bottomMargin=42, leftMargin=50, rightMargin=50)
     styles = getSampleStyleSheet()

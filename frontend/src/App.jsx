@@ -4,7 +4,7 @@ import {
   ArrowRight, BookOpen, CheckCircle2, ChevronRight, CircleHelp, ClipboardList,
   Download, ExternalLink, FileDown, FileText, Info, Landmark, LoaderCircle,
   MessageCircle, RotateCcw, Scale, Send, ShieldAlert, ShieldCheck, Sparkles,
-  UserRound, Wallet, Building2, House, Menu, X, Mic, MicOff, Languages, MessageSquareText,
+  UserRound, Wallet, Building2, House, Menu, X, Mic, MicOff, MessageSquareText,
 } from 'lucide-react';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
@@ -15,22 +15,7 @@ const options = [
   { value: 'employment', label: 'Employment & salary', icon: Building2 },
   { value: 'contract', label: 'Contract & payments', icon: FileText },
 ];
-const languages = [
-  { value: 'en', label: 'English', speech: 'en-IN' },
-  { value: 'hi', label: 'हिन्दी (Hindi)', speech: 'hi-IN' },
-  { value: 'te', label: 'తెలుగు (Telugu)', speech: 'te-IN' },
-  { value: 'ta', label: 'தமிழ் (Tamil)', speech: 'ta-IN' },
-  { value: 'bn', label: 'বাংলা (Bengali)', speech: 'bn-IN' },
-  { value: 'mr', label: 'मराठी (Marathi)', speech: 'mr-IN' },
-];
-const welcomeMessages = {
-  en: "Hello! I'm CaseWise AI. Describe an everyday civil dispute in your own words. I'll help organize the facts and ask about missing details.",
-  hi: 'नमस्ते! अपनी नागरिक विवाद संबंधी समस्या बताइए। मैं तथ्यों को क्रमबद्ध करने और जरूरी सवाल पूछने में मदद करूँगा।',
-  te: 'నమస్కారం! మీ సివిల్ వివాదాన్ని వివరించండి. వివరాలను క్రమబద్ధీకరించి అవసరమైన ప్రశ్నలు అడుగుతాను.',
-  ta: 'வணக்கம்! உங்கள் உரிமையியல் பிரச்சினையை விவரிக்கவும். தகவல்களை ஒழுங்குபடுத்தி தேவையான கேள்விகளைக் கேட்பேன்.',
-  bn: 'নমস্কার! আপনার দেওয়ানি বিরোধের কথা বলুন। তথ্য গুছিয়ে নিতে এবং প্রয়োজনীয় প্রশ্ন করতে সাহায্য করব।',
-  mr: 'नमस्कार! तुमच्या दिवाणी वादाबद्दल सांगा. माहिती व्यवस्थित मांडायला आणि आवश्यक प्रश्न विचारायला मदत करेन.',
-};
+const DEFAULT_WELCOME = "Hello! I'm CaseWise AI. Describe an everyday civil dispute in your own words. I'll help organize the facts and ask about missing details.";
 const documentTypes = [{value:'request',label:'Resolution request'}, {value:'notice',label:'Notice outline (lawyer review)'}, {value:'complaint',label:'Complaint draft'}, {value:'reply',label:'Reply draft'}, {value:'application',label:'Application for assistance'}];
 const fieldConfig = [
   ['location', 'City / state', 'e.g. Kanpur, Uttar Pradesh'],
@@ -46,7 +31,7 @@ const sampleCases = [
   { text: 'My employer has not paid two months of my salary after I resigned. I have payslips, my offer letter and email reminders.', label: 'Unpaid salary' },
   { text: 'A client has not paid my ₹30,000 invoice even though I completed the agreed website project. I have an email agreement and proof of delivery.', label: 'Client payment' },
 ];
-const initialMessages = [{ role: 'assistant', content: welcomeMessages.en }];
+const initialMessages = [{ role: 'assistant', content: DEFAULT_WELCOME }];
 const emptyProfile = Object.fromEntries(fieldConfig.map(([key]) => [key, '']));
 
 function LabelPill({ icon: Icon, children }) {
@@ -55,7 +40,6 @@ function LabelPill({ icon: Icon, children }) {
 
 export default function App() {
   const [category, setCategory] = useState('auto');
-  const [language, setLanguage] = useState('en');
   const [listening, setListening] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [transcriptDraft, setTranscriptDraft] = useState('');
@@ -97,7 +81,7 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE}/api/analyze`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: next, category: formCategory, profile: formProfile, language }),
+        body: JSON.stringify({ messages: next, category: formCategory, profile: formProfile }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Analysis request failed.');
@@ -105,18 +89,6 @@ export default function App() {
       if (addReply) setMessages([...next, { role: 'assistant', content: data.assistant_message }]);
     } catch (e) { setError(e.message || 'Could not connect to the backend.'); }
     finally { setBusy(false); }
-  }
-
-  function changeLanguage(nextLanguage) {
-    // A recording uses the language that was selected when it started.
-    speechRef.current?.cancel();
-    speechRef.current = null;
-    setListening(false);
-    setTranscriptInterim('');
-    setSpeechStatus('');
-    setLanguage(nextLanguage);
-    if (!sentMessages.length) setMessages([{ role: 'assistant', content: welcomeMessages[nextLanguage] || welcomeMessages.en }]);
-    setVoiceError('');
   }
 
   function toggleVoice() {
@@ -136,7 +108,7 @@ export default function App() {
     setTranscriptOpen(true);
     const controller = createContinuousSpeech({
       Recognition,
-      lang: languages.find(item => item.value === language)?.speech || 'en-IN',
+      lang: 'en-IN',
       onTranscript: setTranscriptDraft,
       onInterim: setTranscriptInterim,
       onListening: setListening,
@@ -177,7 +149,7 @@ export default function App() {
     if (!sentMessages.length || analysis?.needs_lawyer || argument.trim().length < 10 || practicing) return;
     setPracticing(true); setError(''); setPracticeResult(null);
     try {
-      const res = await fetch(`${API_BASE}/api/practice`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, category, profile, language, argument }) });
+      const res = await fetch(`${API_BASE}/api/practice`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages, category, profile, argument }) });
       const result = await res.json();
       if (!res.ok) throw new Error(result.detail || 'Argument practice failed.');
       setPracticeResult(result);
@@ -200,7 +172,7 @@ export default function App() {
   function reset() {
     setMessages(initialMessages); setInput(''); setAnalysis(null); setProfile(emptyProfile);
     setCategory('auto'); setError(''); setTab('summary'); setReviewOpen(false); setDraftConfirmed(false);
-    discardTranscription(); setMessages([{ role: 'assistant', content: welcomeMessages[language] || welcomeMessages.en }]); setArgument(''); setPracticeResult(null); setDocumentType('request');
+    discardTranscription(); setMessages(initialMessages); setArgument(''); setPracticeResult(null); setDocumentType('request');
   }
   function openDraftReview() {
     if (!analysis || analysis.needs_lawyer || busy) return;
@@ -222,7 +194,7 @@ export default function App() {
       const safeProfile = { ...draftProfile, facts_narrative: draftFacts };
       const response = await fetch(`${API_BASE}/api/draft`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, category, profile: safeProfile, confirmed: true, document_type: documentType, language }),
+        body: JSON.stringify({ messages, category, profile: safeProfile, confirmed: true, document_type: documentType }),
       });
       if (!response.ok) {
         const details = await response.json();
@@ -258,7 +230,7 @@ export default function App() {
         </div>
         <div className="chat-card">
           <div className="chat-heading"><div><div className="chat-icon"><MessageCircle size={17}/></div><div><strong>Case conversation</strong><small>{analysis ? `${analysis.summary.category_label} · ${analysis.mode === 'gemini-assisted' ? 'AI-assisted intake' : 'Guided demo mode'}` : 'Start by describing your dispute'}</small></div></div><button className="ghost-action" title="Start a new conversation" onClick={reset}><RotateCcw size={15}/> <span>Reset</span></button></div>
-          <div className="category-bar"><span>Type of issue</span><div className="category-controls"><div className="category-select-wrap"><select aria-label="Select civil dispute category" value={category} onChange={e => setCategory(e.target.value)}>{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select><ChevronRight size={14}/></div><div className="category-select-wrap"><Languages size={14}/><select aria-label="Conversation language" value={language} onChange={e => changeLanguage(e.target.value)}>{languages.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}</select></div></div></div>
+          <div className="category-bar"><span>Type of issue</span><div className="category-controls"><div className="category-select-wrap"><select aria-label="Select civil dispute category" value={category} onChange={e => setCategory(e.target.value)}>{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select><ChevronRight size={14}/></div></div></div>
           <div className="chat-stream" aria-live="polite">
             {messages.map((m,i) => <div className={`chat-message ${m.role}`} key={i}>{m.role === 'assistant' && <div className="chat-avatar"><Scale size={15}/></div>}<div className="chat-content"><div className="chat-speaker">{m.role === 'assistant' ? 'CASEWISE AI' : 'YOU'}</div><p>{m.content}</p></div></div>)}
             {busy && <div className="chat-message assistant"><div className="chat-avatar"><Scale size={15}/></div><div className="chat-content"><div className="chat-speaker">CASEWISE AI</div><p className="loading-text"><LoaderCircle size={14} className="spin"/> Reviewing the facts...</p></div></div>}
@@ -267,13 +239,13 @@ export default function App() {
           </div>
           {transcriptOpen && <section className="transcript-review" aria-label="Review voice transcription">
             <div className="transcript-title"><Mic size={16}/><strong>Review voice transcription</strong><span>{listening ? (speechStatus || 'Listening…') : 'Not recording'}</span></div>
-            <label htmlFor="casewise-transcription">Speech is transcribed in {languages.find(l => l.value === language)?.label}. Short pauses are fine; press the microphone button again to stop. Then correct any errors before adding the transcription.</label>
+            <label htmlFor="casewise-transcription">Speech is transcribed in English. Short pauses are fine; press Stop recording when finished. Then correct any errors before adding the transcription.</label>
             <textarea id="casewise-transcription" rows={3} maxLength={2000} value={transcriptDraft} readOnly={listening} onChange={e => setTranscriptDraft(e.target.value)} placeholder={listening ? 'Speak now — pauses will not submit your recording…' : 'Speech will appear here if recognized.'} />
             {transcriptInterim && <p className="interim-text" aria-live="polite">Hearing: {transcriptInterim}</p>}
             {voiceError && <p className="voice-alert" role="alert">{voiceError}</p>}
             <div className="transcript-actions"><button type="button" onClick={discardTranscription}>Discard</button>{listening && <button type="button" className="recording-stop" onClick={() => speechRef.current?.stop()}><MicOff size={14}/> Stop recording</button>}<button type="button" onClick={useTranscription} disabled={listening || !transcriptDraft.trim()}>Add to message for review</button></div>
           </section>}
-          <form className="composer" onSubmit={onSend}><textarea ref={textarea} value={input} rows={2} maxLength={2000} placeholder="Describe what happened, when, and what outcome you want..." onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }}/><div className="composer-footer"><span><Info size={13}/> Audio may be processed by your browser's speech provider. Transcript is never sent until you press Send.</span><div className="composer-actions"><button type="button" disabled={busy} aria-label={listening ? 'Stop microphone' : 'Start voice input'} aria-pressed={listening} title={listening ? 'Stop recording and review transcription' : 'Start continuous dictation in selected language'} onClick={toggleVoice} className={`voice-button ${listening ? 'recording' : ''}`}>{listening ? <MicOff size={16}/> : <Mic size={16}/>}</button><button type="submit" disabled={!input.trim() || busy || listening} className="send-button">Send <Send size={15}/></button></div></div></form>
+          <form className="composer" onSubmit={onSend}><textarea ref={textarea} value={input} rows={2} maxLength={2000} placeholder="Describe what happened, when, and what outcome you want..." onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }}/><div className="composer-footer"><span><Info size={13}/> Audio may be processed by your browser's speech provider. Transcript is never sent until you press Send.</span><div className="composer-actions"><button type="button" disabled={busy} aria-label={listening ? 'Stop microphone' : 'Start voice input'} aria-pressed={listening} title={listening ? 'Stop recording and review transcription' : 'Start continuous dictation in English'} onClick={toggleVoice} className={`voice-button ${listening ? 'recording' : ''}`}>{listening ? <MicOff size={16}/> : <Mic size={16}/>}</button><button type="submit" disabled={!input.trim() || busy || listening} className="send-button">Send <Send size={15}/></button></div></div></form>
         </div>
         <div className="footnote"><ShieldAlert size={15}/> CaseWise AI is a demonstration tool, not a lawyer. Check all advice and legal deadlines with a professional.</div>
       </section>

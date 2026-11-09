@@ -301,6 +301,41 @@ def build_case(
         if re.search(pattern, text, re.I):
             fields["user_role"] = role
             break
+    # Extract explicit dates and requested outcomes from user messages, never guess.
+    if not fields["event_date"]:
+        dates = DATE_RE.findall(text)
+        if dates:
+            fields["event_date"] = dates[-1]
+    if not fields["desired_resolution"]:
+        wishes = re.findall(r"\b(?:i want|i request|i need)\s+([^.!?\n]{4,140})", text, re.I)
+        for wish in reversed(wishes):
+            if re.search(r"refund|deposit|payment|salary|replacement|repair|compensation|return|resolve", wish, re.I):
+                fields["desired_resolution"] = _value(wish, 200)
+                break
+    # A short answer immediately following a CaseWise follow-up may fill that
+    # specific missing field. Refuse long/general text as a field value.
+    for i in range(1, len(messages)):
+        previous = messages[i - 1]
+        current = messages[i]
+        if previous.get("role") != "assistant" or current.get("role") != "user":
+            continue
+        question = _value(previous.get("content"), 500).lower()
+        response = _value(current.get("content"), 300)
+        if len(response) > 130 or response.endswith("?") or response.strip().lower() in ("yes", "no", "okay", "ok"):
+            continue
+        matching = next((key for key, template in QUESTIONS.items() if template.lower() == question), None)
+        if not matching or matching not in fields or fields[matching] or matching in overrides:
+            continue
+        if matching == "event_date":
+            detected = DATE_RE.search(response) or RELATIVE_DATE_RE.search(response)
+            fields[matching] = detected.group(0) if detected else ""
+        elif matching == "amount":
+            detected = AMOUNT_PATTERN.search(response)
+            fields[matching] = "₹" + detected.group(1) if detected else response if response.strip().lower() in ("not applicable", "n/a") else ""
+        elif matching == "counterparty":
+            fields[matching] = response if len(response.split()) <= 12 else ""
+        elif matching in ("location", "desired_resolution", "user_role", "evidence", "key_event"):
+            fields[matching] = response
     fields.update(overrides)
     # A field is user-entered when explicitly provided in an editable form.
     provided = set((profile or {}).keys()) | set(overrides.keys())

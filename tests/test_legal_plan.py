@@ -139,7 +139,8 @@ def test_export_refuses_unreviewed_and_returns_readable_pdf():
     assert "CW-PDFEXAMPLE" in content
     assert "National Consumer Helpline" in content
     assert "user marked complete" in content
-    assert "not verified" in content.lower() or "not independently verified" in content.lower()
+    normalized = " ".join(content.lower().split())
+    assert "not been independently verified" in normalized or "not independently verified" in normalized
     assert len(reader.pages) >= 1
 
 

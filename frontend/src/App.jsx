@@ -432,6 +432,7 @@ export default function App() {
                  <p className="issue-text">{analysis.case_file?.narrative?.text || analysis.summary.draft_facts}</p>
                   {!!analysis.case_file?.structured_summary?.items?.length && <div className="reported-ledger">
                     <strong>Compiled reported facts</strong>
+                    <p className="issue-text">{analysis.case_file.structured_summary.narrative}</p>
                     <dl className="facts-list">{analysis.case_file.structured_summary.items.map(item=><div key={item.key}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>
                     <small>Reported facts only. Evidence is not independently verified.</small>
                   </div>}

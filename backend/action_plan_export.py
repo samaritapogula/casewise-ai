@@ -33,6 +33,7 @@ def as_pdf(plan: dict) -> bytes:
         para(plan["stage"].get("description", ""), small)
     if plan.get("case_focus", {}).get("items"):
         para("Facts driving this plan (user-reported only)", h2)
+        para(plan["case_focus"].get("narrative", ""), small)
         for item in plan["case_focus"]["items"]:
             para(item["label"] + ": " + item["value"])
     para("Legal position - cautious orientation", h2)

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createContinuousSpeech } from './continuousSpeech';
 import CaseFilePanel from './CaseFilePanel';
+import LegalPlanPanel from './LegalPlanPanel';
 import {
   ArrowRight, BookOpen, CheckCircle2, ChevronRight, CircleHelp, ClipboardList,
   Download, ExternalLink, FileDown, FileText, Info, Landmark, LoaderCircle,
@@ -79,6 +80,10 @@ export default function App() {
   const [resolvedIssues, setResolvedIssues] = useState([]);
   const [caseExportBusy, setCaseExportBusy] = useState(false);
   const [caseError, setCaseError] = useState('');
+  const [completedActions, setCompletedActions] = useState({});
+  const [planReviewed, setPlanReviewed] = useState(false);
+  const [planExporting, setPlanExporting] = useState(false);
+  const [planError, setPlanError] = useState('');
   const caseId = useRef('CW-' + Math.random().toString(36).slice(2, 11).toUpperCase());
   const sentMessages = messages.filter(m => m.role === 'user');
 
@@ -96,13 +101,17 @@ export default function App() {
       story_override: storyTouched ? caseStory : '',
       reviewed: caseReviewed,
       ai_suggestion: analysis?.summary?.ai_extracted_case || null,
+      completed_actions: completedActions,
+      plan_reviewed: planReviewed,
       ...other,
     };
   }
 
   function markCaseChanged() {
     setCaseReviewed(false);
+    setPlanReviewed(false);
     setCaseError('');
+    setPlanError('');
   }
 
   async function saveCaseEdits() {
@@ -116,9 +125,50 @@ export default function App() {
       });
       const data = await result.json();
       if (!result.ok) throw new Error(data.detail || 'Could not update the case file.');
-      setAnalysis(current => current ? {...current, case_file:data} : current);
+      const followup = await fetch(API_BASE + '/api/legal-plan', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(casePayload()),
+      });
+      const updatedPlan = followup.ok ? await followup.json() : null;
+      setAnalysis(current => current ? {...current, case_file:data, legal_plan:updatedPlan || current.legal_plan} : current);
     } catch (err) { setCaseError(err.message || 'Could not update the case file.'); }
     finally { setBusy(false); }
+  }
+
+  async function refreshLegalPlan() {
+    if (!sentMessages.length || busy) return;
+    setBusy(true); setPlanError('');
+    try {
+      const response = await fetch(API_BASE + '/api/legal-plan', {
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(casePayload()),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Unable to refresh legal guidance.');
+      setAnalysis(current=>current?{...current,legal_plan:data}:current);
+    } catch(err) {setPlanError(err.message || 'Unable to refresh legal guidance.');}
+    finally {setBusy(false);}
+  }
+
+  async function downloadLegalPlan() {
+    if (!sentMessages.length || !planReviewed || planExporting) return;
+    setPlanExporting(true);setPlanError('');
+    try {
+      const response=await fetch(API_BASE+'/api/legal-plan/export',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(casePayload(messages,{plan_reviewed:true})),
+      });
+      if (!response.ok) {
+        const data=await response.json();
+        throw new Error(data.detail || 'Could not generate action plan PDF.');
+      }
+      const blob=await response.blob();
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;a.download='CaseWise-AI-Action-Plan.pdf';a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1500);
+    } catch(err) {setPlanError(err.message || 'Could not generate action plan PDF.');}
+    finally {setPlanExporting(false);}
   }
 
   async function exportCase(format) {
@@ -243,6 +293,7 @@ export default function App() {
     if (!value || busy) return;
     const next = [...messages, { role: 'user', content: value }];
     setCaseReviewed(false);
+    setPlanReviewed(false);
     setMessages(next);
     setInput('');
     callAnalyze(next);
@@ -258,6 +309,7 @@ export default function App() {
     setCaseCorrections({}); setCaseTimelineEdits(null); setCaseEvidenceEdits(null);
     setCaseStory(''); setStoryTouched(false); setCaseReviewed(false);
     setAskedFields([]); setResolvedIssues([]); setCaseError('');
+    setCompletedActions({}); setPlanReviewed(false); setPlanError('');
     caseId.current = 'CW-' + Math.random().toString(36).slice(2, 11).toUpperCase();
   }
   function openDraftReview() {
@@ -319,7 +371,7 @@ export default function App() {
         </div>
         <div className="chat-card">
           <div className="chat-heading"><div><div className="chat-icon"><MessageCircle size={17}/></div><div><strong>Case conversation</strong><small>{analysis ? `${analysis.summary.category_label} · ${analysis.mode === 'gemini-assisted' ? 'AI-assisted intake' : 'Guided demo mode'}` : 'Start by describing your dispute'}</small></div></div><button className="ghost-action" title="Start a new conversation" onClick={reset}><RotateCcw size={15}/> <span>Reset</span></button></div>
-          <div className="category-bar"><span>Type of issue</span><div className="category-controls"><div className="category-select-wrap"><select aria-label="Select civil dispute category" value={category} onChange={e => setCategory(e.target.value)}>{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select><ChevronRight size={14}/></div></div></div>
+          <div className="category-bar"><span>Type of issue</span><div className="category-controls"><div className="category-select-wrap"><select aria-label="Select civil dispute category" value={category} onChange={e => { const selected = e.target.value; setCategory(selected); markCaseChanged(); setCompletedActions({}); if (sentMessages.length && !busy) callAnalyze(messages, false, profile, selected); }}>{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select><ChevronRight size={14}/></div></div></div>
           <div className="chat-stream" aria-live="polite">
             {messages.map((m,i) => <div className={`chat-message ${m.role}`} key={i}>{m.role === 'assistant' && <div className="chat-avatar"><Scale size={15}/></div>}<div className="chat-content"><div className="chat-speaker">{m.role === 'assistant' ? 'CASEWISE AI' : 'YOU'}</div><p>{m.content}</p></div></div>)}
             {busy && <div className="chat-message assistant"><div className="chat-avatar"><Scale size={15}/></div><div className="chat-content"><div className="chat-speaker">CASEWISE AI</div><p className="loading-text"><LoaderCircle size={14} className="spin"/> Reviewing the facts...</p></div></div>}
@@ -339,7 +391,7 @@ export default function App() {
         <div className="footnote"><ShieldAlert size={15}/> CaseWise AI is a demonstration tool, not a lawyer. Check all advice and legal deadlines with a professional.</div>
       </section>
       <aside className={`right-panel ${mobileOpen ? 'mobile-open' : ''}`}>
-        <div className="right-tabs"><button className={tab === 'summary' ? 'active' : ''} onClick={() => setTab('summary')}><ClipboardList size={16}/> Overview</button><button className={tab === 'timeline' ? 'active' : ''} onClick={() => setTab('timeline')}>Timeline</button><button className={tab === 'evidence' ? 'active' : ''} onClick={() => setTab('evidence')}>Evidence</button><button className={tab === 'review' ? 'active' : ''} onClick={() => setTab('review')}>Review &amp; export</button><button className={tab === 'details' ? 'active' : ''} onClick={() => setTab('details')}><UserRound size={15}/> Details</button></div>
+        <div className="right-tabs"><button className={tab === 'summary' ? 'active' : ''} onClick={() => setTab('summary')}><ClipboardList size={16}/> Overview</button><button className={tab === 'timeline' ? 'active' : ''} onClick={() => setTab('timeline')}>Timeline</button><button className={tab === 'evidence' ? 'active' : ''} onClick={() => setTab('evidence')}>Evidence</button><button className={tab === 'review' ? 'active' : ''} onClick={() => setTab('review')}>Review &amp; export</button><button className={tab === 'plan' ? 'active' : ''} onClick={() => setTab('plan')}>Action plan</button><button className={tab === 'details' ? 'active' : ''} onClick={() => setTab('details')}><UserRound size={15}/> Details</button></div>
         <div className="right-content">
           {tab === 'summary' ? <>
             <div className="panel-topline"><span>YOUR CASE FILE</span>{analysis && <span className="category-tag">{analysis.summary.category_label}</span>}</div>
@@ -358,14 +410,19 @@ export default function App() {
                  <p className="issue-text">{analysis.summary.ai_extracted_case?.position_suggestion || 'Possible options depend on the facts and local rules. Review the official resources below; this is not a legal merits prediction.'}</p>
                </div>
                {Object.keys(analysis.summary.facts_reported).length > 0 && <div className="section-block"><h2>Facts captured</h2><dl className="facts-list">{Object.entries(analysis.summary.facts_reported).map(([k,v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></div>}
-              <div className="section-block"><div className="section-header"><h2>Suggested next steps</h2><span className="subtle-label">General information</span></div><ol className="steps-list">{analysis.next_steps.map((v,i) => <li key={i}><span className="step-number">{i+1}</span><span>{v}</span></li>)}</ol></div>
+              <div className="section-block"><div className="section-header"><h2>Suggested next steps</h2><button className="inline-button" onClick={() => setTab('plan')}>Open action plan <ChevronRight size={13}/></button></div><ol className="steps-list">{analysis.next_steps.map((v,i) => <li key={i}><span className="step-number">{i+1}</span><span>{v}</span></li>)}</ol></div>
               <div className="section-block"><div className="section-header"><h2>Information still needed</h2><button className="inline-button" onClick={() => setTab('details')}>Add details <ChevronRight size={13}/></button></div>{analysis.case_file?.missing?.length ? <div className="missing-tags">{analysis.case_file.missing.map(v => <span key={v.key}>{v.label}</span>)}</div> : <p className="small-success"><CheckCircle2 size={15}/> Case-builder checklist complete. Facts and law still need checking.</p>}</div>
               <div className="section-block"><h2>Official starting points</h2><div className="source-list">{analysis.sources.map(src => <a key={src.id} href={src.url} target="_blank" rel="noopener noreferrer"><span className="source-icon"><Landmark size={16}/></span><span><strong>{src.title}</strong><small>{src.description}</small></span><ExternalLink size={14}/></a>)}</div><p className="source-caveat">{analysis.source_status}</p></div>
               <div className="safety-card"><ShieldAlert size={17}/><div><strong>Know the limits</strong>{analysis.safety_flags.map((flag,i) => <p key={i}>{flag}</p>)}</div></div>
               <div className="draft-card"><div className="draft-icon"><FileDown size={20}/></div><div><strong>Prepare a document</strong><p>Choose a request, notice outline, complaint, reply or application. Review every fact before creating a PDF.</p></div><button disabled={downloading || analysis.needs_lawyer || busy} onClick={openDraftReview}><ClipboardList size={16}/> Review &amp; generate PDF</button></div>
               <div className="practice-card"><h2><MessageSquareText size={16}/> Practise your argument</h2><p>Try explaining your side. CaseWise AI will ask a respectful opposing-side question and suggest improvements. Not a prediction.</p><textarea maxLength={1600} rows={3} value={argument} onChange={e => setArgument(e.target.value)} placeholder="My position is... The evidence is..."/><button onClick={practice} disabled={!sentMessages.length || analysis.needs_lawyer || argument.trim().length < 10 || practicing}>{practicing ? 'Thinking...' : 'Practise with AI'}</button>{practiceResult && <div className="practice-result"><strong>Other side might ask</strong><p>{practiceResult.opponent_question}</p><strong>How to improve your argument</strong><p>{practiceResult.feedback}</p><small>{practiceResult.mode === 'guided-demo' ? 'Offline demo feedback' : 'Gemini-assisted practice; verify details'}</small></div>}</div>
             </>}
-          </> : tab === 'details' ? <div className="details-tab"><div className="panel-topline">OPTIONAL FACT CHECK</div><h2>Complete your case details</h2><p>Add only details you're comfortable sharing. These fields are used to create a clearer summary and draft letter.</p><div className="profile-fields">{fieldConfig.map(([key,label,hint]) => <label key={key}>{label}<input value={profile[key]} maxLength={250} placeholder={hint} onChange={e => {markCaseChanged();setProfile(p => ({ ...p, [key]: e.target.value }));}}/></label>)}</div><button className="update-button" disabled={!sentMessages.length || busy} onClick={async () => { await callAnalyze(messages, false); setTab('summary'); }}>Update case overview <ArrowRight size={16}/></button><p className="privacy-note"><ShieldCheck size={15}/> Case text is not intentionally saved on the server. If Gemini is configured, conversational inputs are sent to its API.</p></div> : <CaseFilePanel mode={tab} file={analysis?.case_file}
+          </> : tab === 'plan' ? <LegalPlanPanel plan={analysis?.legal_plan}
+    checked={completedActions} onCheck={(id,value) => setCompletedActions(prev => ({...prev,[id]:value}))}
+    reviewed={planReviewed} onReviewed={setPlanReviewed}
+    onExport={downloadLegalPlan} exporting={planExporting} error={planError}
+    onRefresh={refreshLegalPlan} refreshing={busy}
+  /> : tab === 'details' ? <div className="details-tab"><div className="panel-topline">OPTIONAL FACT CHECK</div><h2>Complete your case details</h2><p>Add only details you're comfortable sharing. These fields are used to create a clearer summary and draft letter.</p><div className="profile-fields">{fieldConfig.map(([key,label,hint]) => <label key={key}>{label}<input value={profile[key]} maxLength={250} placeholder={hint} onChange={e => {markCaseChanged();setProfile(p => ({ ...p, [key]: e.target.value }));}}/></label>)}</div><button className="update-button" disabled={!sentMessages.length || busy} onClick={async () => { await callAnalyze(messages, false); setTab('summary'); }}>Update case overview <ArrowRight size={16}/></button><p className="privacy-note"><ShieldCheck size={15}/> Case text is not intentionally saved on the server. If Gemini is configured, conversational inputs are sent to its API.</p></div> : <CaseFilePanel mode={tab} file={analysis?.case_file}
     profile={profile} onProfile={(key,value)=>{markCaseChanged();setProfile(p=>({...p,[key]:value}));}}
     corrections={caseCorrections} onCorrection={(key,value)=>{markCaseChanged();setCaseCorrections(p=>({...p,[key]:value}));}}
     timelineEdits={caseTimelineEdits} onTimeline={next=>{markCaseChanged();setCaseTimelineEdits(next);}}

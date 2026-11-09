@@ -22,6 +22,8 @@ from .llm import conversational_followup, is_configured
 from .workflow import extract_case, practice_argument
 from .case_builder import build_case
 from .case_export import case_as_json, case_as_pdf
+from .legal_plan import build_legal_plan
+from .action_plan_export import as_pdf as action_plan_pdf
 
 app = FastAPI(title="CaseWise AI", version="0.1.0", description="Cautious Indian civil-dispute intake demo")
 origins = [origin.strip() for origin in os.getenv("CASEWISE_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if origin.strip()]
@@ -50,6 +52,8 @@ class Request(BaseModel):
     reviewed: bool = False
     ai_suggestion: dict[str, Any] | None = None
     export_format: str = Field(default="pdf", pattern="^(pdf|json)$")
+    completed_actions: dict[str, bool] = Field(default_factory=dict, max_length=16)
+    plan_reviewed: bool = False
 
 
 class PracticeRequest(Request):
@@ -110,6 +114,7 @@ def analyze_case(request: Request):
             case_id=request.case_id,
         )
         data["case_file"] = case
+        data["legal_plan"] = build_legal_plan(case, completed_actions=request.completed_actions)
         data["language"] = "en"
         if data["needs_lawyer"]:
             data["assistant_message"] = "This may be urgent or outside the civil-only prototype. Seek help from a qualified local lawyer promptly; do not rely on generated legal advice."
@@ -143,6 +148,31 @@ def export_case_file(request: Request):
                                      "Cache-Control": "no-store"})
         return Response(content=case_as_pdf(case), media_type="application/pdf",
                         headers={"Content-Disposition": 'attachment; filename="casewise-case-file.pdf"',
+                                 "Cache-Control": "no-store"})
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/legal-plan")
+def legal_plan(request: Request):
+    """Build cautious legal information from the most recent Phase 2 facts and edits."""
+    try:
+        case = build_case_from_request(request, request.ai_suggestion)
+        return build_legal_plan(case, completed_actions=request.completed_actions)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/legal-plan/export")
+def export_legal_plan(request: Request):
+    """Only create a downloadable action plan after explicit user acknowledgement."""
+    if not request.plan_reviewed:
+        raise HTTPException(status_code=422, detail="Please review the action plan disclaimer and confirm before downloading.")
+    try:
+        case = build_case_from_request(request, request.ai_suggestion)
+        plan = build_legal_plan(case, completed_actions=request.completed_actions)
+        return Response(content=action_plan_pdf(plan), media_type="application/pdf",
+                        headers={"Content-Disposition": 'attachment; filename="casewise-action-plan.pdf"',
                                  "Cache-Control": "no-store"})
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

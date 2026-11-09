@@ -48,17 +48,17 @@ def case_as_pdf(file: dict) -> bytes:
     add("Civil issue: " + file["category_label"] + " / " + file["subtype"]["label"])
     add("Information completeness: %s/%s checks. This is NOT legal merit or filing readiness."
         % (file["completeness"]["completed"], file["completeness"]["total"]), small)
-    add("Reported facts", section)
+    # The user's reviewed account appears once, followed by one compact
+    # structured ledger. Previously, the PDF printed the facts three times.
+    add("Reviewed case narrative", section)
+    add(file["narrative"]["text"])
+    add("Compiled reported facts (not independently verified)", section)
     for key, title in FIELDS:
+        if key == "key_event":
+            continue  # Already represented in the account and timeline.
         entry = file["facts"].get(key, {})
         value = entry.get("value", "") or "Not supplied"
         add("%s: %s (%s)" % (title, value, entry.get("status", "missing")))
-    add("Compiled reported facts (not independently verified)", section)
-    add(file.get("structured_summary", {}).get("narrative", ""), small)
-    for entry in file.get("structured_summary", {}).get("items", []):
-        add(entry["label"] + ": " + entry["value"])
-    add("Reviewed case narrative", section)
-    add(file["narrative"]["text"])
     add("Timeline", section)
     for row in file["timeline"]:
         add("%s — %s [status: %s; source: %s]" % (
@@ -74,14 +74,17 @@ def case_as_pdf(file: dict) -> bytes:
     if not file["evidence"]:
         add("No evidence identified in the conversation.")
     detail_questions = file.get("context", {}).get("questions", [])
-    if detail_questions:
-        add("Additional case-specific information", section)
-        for item in detail_questions:
-            add(item["label"] + ": " + (
-                item["answer"] if item.get("status") != "missing"
-                else "[Not yet provided]"
-            ))
-        add("Optional questions do not establish legal merit or form requirements.", small)
+    answered = [item for item in detail_questions if item.get("status") != "missing"]
+    pending = [item for item in detail_questions if item.get("status") == "missing"]
+    if answered:
+        add("Additional reported details", section)
+        for item in answered:
+            add(item["label"] + ": " + item["answer"])
+    # Keep pending questions together with missing/ambiguous information.
+    if pending:
+        add("Further questions to clarify", section)
+        for item in pending:
+            add(item["question"])
     add("Unresolved clarifications", section)
     missing = file["missing"]
     if missing:

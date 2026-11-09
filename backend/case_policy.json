@@ -36,13 +36,19 @@
           "id": "property_terms",
           "label": "Agreement terms",
           "question": "What do the relevant written tenancy or property terms say, if anything?",
-          "purpose": "Written terms can affect the options that a local adviser should check."
+          "purpose": "Written terms can affect the options that a local adviser should check.",
+          "source_patterns": [
+            "\\b(?:rental agreement|tenancy agreement|lease agreement)\\b[^.!?]{0,150}\\b(?:states|says|provides|requires|allows)\\b"
+          ]
         },
         {
           "id": "property_response",
           "label": "Other party's explanation",
           "question": "Has the other party given a reason or response? If so, what did they say?",
-          "purpose": "The other party's explanation may change the factual assessment."
+          "purpose": "The other party's explanation may change the factual assessment.",
+          "source_patterns": [
+            "\\b(?:landlord|owner|manager|other party)\\b[^.!?]{0,140}\\b(?:refused|denied|said|replied|responded|claimed|explained)\\b"
+          ]
         }
       ],
       "document_priority": [
@@ -105,13 +111,19 @@
           "id": "consumer_purchase",
           "label": "Goods or services",
           "question": "What goods or services were purchased and what was promised?",
-          "purpose": "Identifies the actual transaction and representations."
+          "purpose": "Identifies the actual transaction and representations.",
+          "source_patterns": [
+            "\\b(?:purchased|bought|ordered)\\b"
+          ]
         },
         {
           "id": "consumer_contact",
           "label": "Seller's response",
           "question": "What response, if any, has the seller or service provider given?",
-          "purpose": "Documents prior resolution attempts."
+          "purpose": "Documents prior resolution attempts.",
+          "source_patterns": [
+            "\\b(?:seller|retailer|merchant|store|shop|provider)\\b[^.!?]{0,160}\\b(?:refused|denied|responded|replied|offered|rejected|said|stated)\\b"
+          ]
         }
       ],
       "document_priority": [
@@ -138,7 +150,10 @@
               "id": "consumer_condition",
               "label": "Product condition",
               "question": "What was defective, and how and when did you discover it?",
-              "purpose": "Helps distinguish reported damage from independently verified evidence."
+              "purpose": "Helps distinguish reported damage from independently verified evidence.",
+              "source_patterns": [
+                "\\b(?:stopped working|stopped functioning|malfunctioned|broke|damaged|defective|faulty)\\b"
+              ]
             }
           ]
         },
@@ -173,13 +188,19 @@
           "id": "employment_terms",
           "label": "Employment terms",
           "question": "What written employment or pay terms apply, if known?",
-          "purpose": "Contract terms and worker status affect what a professional must review."
+          "purpose": "Contract terms and worker status affect what a professional must review.",
+          "source_patterns": [
+            "\\b(?:employment contract|offer letter|appointment letter)\\b[^.!?]{0,140}\\b(?:states|says|provides|requires|allows)\\b"
+          ]
         },
         {
           "id": "employment_response",
           "label": "Employer response",
           "question": "Have you asked the employer or HR about this? What response did you receive?",
-          "purpose": "Clarifies earlier communication and unresolved points."
+          "purpose": "Clarifies earlier communication and unresolved points.",
+          "source_patterns": [
+            "\\b(?:employer|company|hr|manager)\\b[^.!?]{0,140}\\b(?:refused|denied|said|replied|responded|claimed|explained)\\b"
+          ]
         }
       ],
       "document_priority": [
@@ -231,13 +252,19 @@
           "id": "contract_terms",
           "label": "Payment or performance terms",
           "question": "What payment or performance terms are written in the agreement, if any?",
-          "purpose": "Clarifies what the parties report agreeing to."
+          "purpose": "Clarifies what the parties report agreeing to.",
+          "source_patterns": [
+            "\\b(?:agreement|contract|invoice)\\b[^.!?]{0,140}\\b(?:states|says|provides|requires|allows)\\b"
+          ]
         },
         {
           "id": "contract_response",
           "label": "Other party's response",
           "question": "Has the other party raised objections or explained why they have not performed or paid?",
-          "purpose": "Shows the disputed issues without assuming fault."
+          "purpose": "Shows the disputed issues without assuming fault.",
+          "source_patterns": [
+            "\\b(?:client|customer|contractor|other party)\\b[^.!?]{0,140}\\b(?:refused|denied|said|replied|responded|claimed|explained)\\b"
+          ]
         }
       ],
       "document_priority": [

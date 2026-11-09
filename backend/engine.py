@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from typing import Any
 from .knowledge import CATEGORIES, SOURCES, VERIFIED_ON, ALLOWED_CATEGORIES
+from .intake_extraction import extract_counterparty, extract_location
 
 CRIMINAL_PATTERNS = (
     r"\b(murder|rape|kidnapp(?:ed|ing)?|sexual assault|arrested|police custody|bail application|fir registered)\b",
@@ -37,17 +38,26 @@ def select_category(text: str, category: str = "auto") -> str:
     return max(scores, key=scores.get)
 
 
-def profile_from_messages(messages: list[dict[str, str]], profile: dict[str, Any] | None) -> dict[str, str]:
+def profile_from_messages(messages: list[dict[str, str]], profile: dict[str, Any] | None, category: str = "auto") -> dict[str, str]:
     result = {k: clean((profile or {}).get(k), 250) for k in PROFILE_FIELDS}
     user_text = "\n".join(clean(m.get("content"), 2000) for m in messages if m.get("role") == "user")
     if not result["amount"]:
         match = AMOUNT_PATTERN.search(user_text)
         if match:
             result["amount"] = "₹" + match.group(1)
+    if not result["counterparty"]:
+        result["counterparty"] = extract_counterparty(
+            [clean(m.get("content"), 2000) for m in messages if m.get("role") == "user"],
+            select_category(user_text, category),
+        )
     if not result["location"]:
-        match = STATE_HINT.search(user_text)
-        if match:
-            result["location"] = match.group(1)
+        result["location"] = extract_location(
+            [clean(m.get("content"), 2000) for m in messages if m.get("role") == "user"],
+        )
+        if not result["location"]:
+            match = STATE_HINT.search(user_text)
+            if match:
+                result["location"] = match.group(1)
     if not result["evidence"]:
         matches = [term for term in EVIDENCE_MARKERS if re.search(r"\b" + re.escape(term) + r"s?\b", user_text, re.I)]
         if matches:
@@ -63,7 +73,7 @@ def analyze(messages: list[dict[str, str]], profile: dict[str, Any] | None = Non
     complete_story = "\n".join(user_messages)
     chosen = select_category(complete_story, category)
     info = CATEGORIES[chosen]
-    fields = profile_from_messages(messages, profile)
+    fields = profile_from_messages(messages, profile, chosen)
     criminal = bool(any(re.search(p, complete_story, re.I) for p in CRIMINAL_PATTERNS))
     urgent = bool(URGENT_PATTERN.search(complete_story))
     missing = [PROFILE_LABELS[k] for k in PROFILE_FIELDS if not fields[k]]

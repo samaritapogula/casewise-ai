@@ -7,12 +7,14 @@ from __future__ import annotations
 
 import hashlib
 import re
+from difflib import SequenceMatcher
 from datetime import datetime
 from typing import Any
 
 from .engine import AMOUNT_PATTERN, clean, analyze, draft_narrative
 from .evidence_recognition import extract_evidence
-from .case_enrichment import build_context, explicit_unknown_fields, structured_facts_summary, event_kind
+from .case_enrichment import (build_context, explicit_unknown_fields, structured_facts_summary,
+                              event_kind, match_primary_question, EVENT_DATE_FOLLOWUP_PREFIX)
 
 FIELD_LABELS = {
     "user_role": "Your role",
@@ -130,6 +132,8 @@ EVENT_PATTERN = re.compile(
     r"withheld|complained|contacted|emailed|sent|requested|"
     r"terminated|resigned|dismissed|fired|repaired|damaged|broke|"
     r"charged|deducted|issued|completed|supplied|cancelled|canceled|"
+    r"stopped working|stopped functioning|ceased working|malfunctioned|"
+    r"became unusable|broke down|developed a fault|did not work|"
     r"breached|overdue|defaulted|failed to pay|did not pay|not paid|"
     r"has not paid|have not paid|not returned|has not returned|"
     r"haven't returned|hasn't returned|did not return|"
@@ -227,7 +231,6 @@ def _narrative_messages(messages: list[dict]) -> list[dict]:
     provenance, but should not become an awkward new sentence in the story.
     """
     cleaned = []
-    questions = {question.casefold() for question in QUESTIONS.values()}
     for index, message in enumerate(messages):
         if message.get("role") != "user":
             continue
@@ -235,7 +238,7 @@ def _narrative_messages(messages: list[dict]) -> list[dict]:
         prev = messages[index - 1] if index else {}
         was_field_answer = (
             prev.get("role") == "assistant"
-            and _value(prev.get("content"), 500).casefold() in questions
+            and match_primary_question(prev.get("content"), QUESTIONS) is not None
         )
         if was_field_answer and len(text) < 140 and not EVENT_PATTERN.search(text):
             continue
@@ -248,7 +251,8 @@ def _evidence(messages: list[dict], edits: list[dict] | None) -> list[dict]:
 
 
 
-def _issues(messages: list[dict], values: dict, resolved: set[str]) -> list[dict]:
+def _issues(messages: list[dict], values: dict, resolved: set[str],
+            timeline: list[dict] | None = None) -> list[dict]:
     text = "\n".join(_value(m.get("content"), 2000) for m in messages if m.get("role") == "user")
     amounts = sorted(set(m.group(1).replace(",", "") for m in AMOUNT_PATTERN.finditer(text)))
     issues = []
@@ -273,15 +277,31 @@ def _issues(messages: list[dict], values: dict, resolved: set[str]) -> list[dict
                 })
         except ValueError:
             pass
-    dates = sorted(set(match.group(0) for match in DATE_RE.finditer(text)))
-    if len(dates) > 1:
-        issues.append({
-            "id": "multiple_dates",
-            "type": "clarification",
-            "field": "event_date",
-            "message": "Several dates appear in the story. Confirm which date belongs to the key event; different dates do not automatically conflict.",
-            "examples": dates[:5],
-        })
+    # Multiple calendar dates are normal (purchase, failure, complaint).
+    # Flag only if two *similar descriptions of the same event* report
+    # different dates. This is a clarification, never an automatic conflict.
+    dated = [row for row in (timeline or []) if _date_sort(row.get("date", ""))]
+    for index, first in enumerate(dated):
+        for second in dated[index + 1:]:
+            if _date_sort(first["date"]) == _date_sort(second["date"]):
+                continue
+            def identity(row):
+                event_text = DATE_RE.sub(" ", row["event"]).casefold()
+                event_text = re.sub(r"[^a-z0-9 ]", " ", event_text)
+                event_text = re.sub(r"\b(?:on|at|the|a|an)\b", " ", event_text)
+                return re.sub(r"\s+", " ", event_text).strip()
+            left, right = identity(first), identity(second)
+            if len(left) >= 18 and len(right) >= 18 and SequenceMatcher(None, left, right).ratio() >= 0.86:
+                issues.append({
+                    "id": "multiple_dates",
+                    "type": "clarification",
+                    "field": "event_date",
+                    "message": "A similar event was reported with different dates. Check whether these are two separate events or a corrected date.",
+                    "examples": [first["date"], second["date"]],
+                })
+                break
+        if any(issue["id"] == "multiple_dates" for issue in issues):
+            break
     # Contradictory claims are only suggestions for the user to clarify.
     # They may describe different dates, transactions or partial payments.
     statement_pairs = (
@@ -363,9 +383,11 @@ def build_case(
             break
     # Extract explicit dates and requested outcomes from user messages, never guess.
     if not fields["event_date"]:
-        dates = DATE_RE.findall(text)
-        if dates:
-            fields["event_date"] = dates[-1]
+        # Only the date attached to the selected key event may populate this
+        # field. A purchase date must never silently become a refusal date.
+        event_date = DATE_RE.search(central_event) or RELATIVE_DATE_RE.search(central_event)
+        if event_date:
+            fields["event_date"] = event_date.group(0)
     if not fields["desired_resolution"]:
         wishes = re.findall(r"\b(?:i want|i request|i need)\s+([^.!?\n]{4,140})", text, re.I)
         for wish in reversed(wishes):
@@ -383,7 +405,7 @@ def build_case(
         response = _value(current.get("content"), 300)
         if len(response) > 130 or response.endswith("?") or response.strip().lower() in ("yes", "no", "okay", "ok"):
             continue
-        matching = next((key for key, template in QUESTIONS.items() if template.lower() == question), None)
+        matching = match_primary_question(previous.get("content"), QUESTIONS)
         if not matching or matching not in fields or fields[matching] or matching in overrides:
             continue
         if matching == "event_date":
@@ -419,7 +441,7 @@ def build_case(
     if evidence and not _present(fields["evidence"]):
         facts["evidence"]["value"] = ", ".join(item["type"] for item in evidence[:5])
         facts["evidence"]["status"] = "reported"
-    issues = _issues(messages, fields, set(resolved_issues or []))
+    issues = _issues(messages, fields, set(resolved_issues or []), timeline)
 
     # A case-completeness indicator measures filled factual fields, never case strength.
     checks = {
@@ -439,12 +461,22 @@ def build_case(
     allowed_context = {"context:" + row["id"] for row in context["questions"]}
     asked = [key for key in (asked_fields or [])
              if key in QUESTIONS or key in allowed_context]
-    unanswered = [item["key"] for item in missing]
-    next_field = next((key for key in (
+    unanswered = [item["key"] for item in missing if item["key"] not in unknown_fields]
+    ordered_missing = [key for key in (
         "counterparty", "location", "event_date", "desired_resolution",
         "evidence", "amount", "subtype", "key_event", "user_role",
-    ) if key in unanswered and key not in asked), None)
+    ) if key in unanswered]
+    # Asked is not answered: do not drop a missing field permanently just
+    # because the question has already appeared in the chat.
+    next_field = next((key for key in ordered_missing if key not in asked),
+                      ordered_missing[0] if ordered_missing else None)
     question = QUESTIONS.get(next_field)
+    if next_field == "event_date" and central_event:
+        # Ask about the actual disputed event instead of silently equating
+        # an earlier purchase, payment or failure date with its date.
+        description = DATE_RE.sub("", _value(central_event, 160)).strip(" ,.;:")
+        question = (EVENT_DATE_FOLLOWUP_PREFIX + description
+                    + "? If you do not know, say 'not known'.")
     # Additional issue-specific questions start only when the core intake is
     # answered (an explicitly unknown fact is an acknowledged answer).
     core_addressed = all(
@@ -452,11 +484,12 @@ def build_case(
         for key, check in checks.items()
     )
     if next_field is None and core_addressed and chosen != "other":
-        next_context = next((
-            row for row in context["questions"]
-            if row["status"] == "missing"
-            and "context:" + row["id"] not in asked
-        ), None)
+        outstanding_context = [row for row in context["questions"]
+                               if row["status"] == "missing"]
+        next_context = next(
+            (row for row in outstanding_context if "context:" + row["id"] not in asked),
+            outstanding_context[0] if outstanding_context else None,
+        )
         if next_context:
             next_field = "context:" + next_context["id"]
             question = next_context["question"]

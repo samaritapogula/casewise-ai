@@ -269,7 +269,7 @@ def test_partial_date_and_year_followup_resolve_without_year_inference():
     final = build_case(messages, asked_fields=["event_date"])
     assert final["facts"]["event_date"]["value"] == "20 October 2026"
     assert final["next_question"]["field"] != "event_date"
-    assert "October 20" not in final["narrative"]["text"]
+    assert final["narrative"]["text"] == BUYER_STORY  # A short field reply never rewrites the story.
 
 
 def test_complaint_date_confirmed_as_refusal_date_only_after_yes():

@@ -280,5 +280,14 @@
         }
       }
     }
-  }
+  },
+  "regional_sources": [
+    {
+      "category": "property",
+      "state": "Uttar Pradesh",
+      "source_ids": [
+        "up_tenancy"
+      ]
+    }
+  ]
 }

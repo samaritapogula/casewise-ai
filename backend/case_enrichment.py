@@ -23,6 +23,20 @@ def answer_status(value: str) -> str:
     return "not_known" if value.strip().casefold().strip(". ") in UNKNOWN_ANSWERS else "reported"
 
 
+EVENT_DATE_FOLLOWUP_PREFIX = "When did this reported event happen: "
+
+
+def match_primary_question(question: str, primary_questions: dict[str, str]) -> str | None:
+    """Recognize standard or event-specific questions without guessing a field."""
+    normalized = _sanitize(question, 550)
+    for field, template in primary_questions.items():
+        if normalized == template:
+            return field
+    if normalized.startswith(EVENT_DATE_FOLLOWUP_PREFIX) and normalized.endswith("If you do not know, say 'not known'."):
+        return "event_date"
+    return None
+
+
 def build_context(
     category: str, subtype: str, messages: list[dict],
     overrides: dict[str, str] | None = None,
@@ -89,8 +103,7 @@ def explicit_unknown_fields(messages: list[dict], primary_questions: dict[str, s
         if before.get("role") != "assistant" or after.get("role") != "user":
             continue
         response = _sanitize(after.get("content"), 120)
-        field = next((k for k, question in primary_questions.items()
-                      if _sanitize(before.get("content"), 550) == question), None)
+        field = match_primary_question(before.get("content"), primary_questions)
         if field:
             if answer_status(response) == "not_known":
                 unknown.add(field)

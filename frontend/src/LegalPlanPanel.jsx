@@ -15,6 +15,15 @@ export default function LegalPlanPanel({
       <h2>Legal position & next steps</h2>
       <p>Case: {plan.case_id || 'Current session'} · Source review: {plan.source_reviewed_on}</p>
     </div>
+    {plan.stage && <div className="plan-stage">
+      <strong>{plan.stage.title}</strong>
+      <p>{plan.stage.description}</p>
+      <small>Information collected ≠ legal merit, filing eligibility or verified evidence.</small>
+    </div>}
+    {!!plan.case_focus?.items?.length && <div className="legal-section">
+      <h3>Facts driving this plan (reported only)</h3>
+      <dl className="facts-list">{plan.case_focus.items.map(item=><div key={item.key}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>
+    </div>}
     {plan.escalation.level !== 'general_guidance' && <div className="legal-warning" role="alert">
       <ShieldAlert size={20}/>
       <div><strong>{plan.escalation.level === 'urgent_review' ? 'Prompt professional help recommended' : 'Category needs review'}</strong>
@@ -51,6 +60,14 @@ export default function LegalPlanPanel({
       <strong className="legal-subtitle">Missing details or documents</strong>
       <ul>{plan.evidence_gaps.length ? plan.evidence_gaps.map((item,i)=><li key={i}>{item}</li>) : <li>No gaps flagged by these limited checks; verification may still be required.</li>}</ul>
     </div>
+    {!!plan.context_questions?.length && <div className="legal-section">
+      <h3>Further questions that can improve the plan</h3>
+      <p className="case-muted">Optional, specific to this issue. Answer in the chat or under Review &amp; export. “Not known” is acceptable.</p>
+      {plan.context_questions.map(question=><div className="legal-route" key={question.id}>
+        <strong>{question.label}</strong><p>{question.question}</p>
+        <small>{question.status === 'missing' ? 'Not answered yet' : question.status === 'not_known' ? 'You reported not knowing' : 'Your reported answer: ' + question.answer}</small>
+      </div>)}
+    </div>}
     <div className="legal-section">
       <h3>Where you could take action</h3>
       <p className="case-muted">These are possible channels, not instructions to file, and no eligibility has been confirmed.</p>
@@ -74,7 +91,7 @@ export default function LegalPlanPanel({
         <ul>{plan.escalation.reasons.map((reason,i)=><li key={i}>{reason}</li>)}</ul>
       </div>
     </div>
-    {onChooseDocument && <DocumentChooser onChoose={onChooseDocument} disabled={documentsDisabled} />}
+    {onChooseDocument && <DocumentChooser onChoose={onChooseDocument} disabled={documentsDisabled} recommendations={plan.document_recommendations}/>}
     <div className="legal-export">
       <label><input type="checkbox" checked={reviewed} onChange={e=>onReviewed(e.target.checked)}/>
         <span>I have reviewed this informational action plan. I understand that source links do not prove legal applicability and this PDF is not ready for filing.</span>

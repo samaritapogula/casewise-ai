@@ -218,3 +218,49 @@ def test_urgent_and_unknown_categories_never_trigger_routine_recommendation():
     unknown = build_legal_plan(build_case(msgs("I have an unusual disagreement with someone.")))
     assert unknown["stage"]["code"] == "triage"
     assert not any(a["id"] == "contact" for a in unknown["actions"])
+
+
+
+def test_compiled_prose_changes_with_reported_facts_across_categories():
+    texts = []
+    for category, story, _, party, goal in EXAMPLES:
+        case = full_case(category, story, party, goal)
+        prose = case["structured_summary"]["narrative"]
+        assert party in prose
+        assert goal in prose
+        assert "₹30,000" in prose
+        assert "not been independently verified" in prose
+        assert "Reported event:" in prose
+        texts.append(prose)
+    assert len(set(texts)) == len(EXAMPLES)
+
+
+def test_state_specific_law_requires_an_explicit_reported_state_not_a_city_guess():
+    story = "My landlord refused to return my rental deposit."
+    just_city = build_legal_plan(build_case(msgs(story), profile={"location": "Kanpur"}))
+    with_state = build_legal_plan(build_case(msgs(story), profile={"location": "Kanpur, Uttar Pradesh"}))
+    assert "up_tenancy" not in {source["id"] for source in just_city["sources"]}
+    assert "up_tenancy" in {source["id"] for source in with_state["sources"]}
+
+
+def test_intake_does_not_show_formal_channels_before_the_issue_is_described():
+    plan = build_legal_plan(build_case(msgs("My landlord won't return the deposit.")))
+    assert plan["stage"]["code"] == "intake"
+    assert plan["routes"] == []
+    assert all(a["id"] != "channels" for a in plan["actions"])
+
+
+def test_user_context_overrides_are_preserved_as_unverified_case_answers():
+    story = "I bought a damaged item and requested a refund from a retailer."
+    before = build_case(msgs(story))
+    context_id = before["context"]["questions"][0]["id"]
+    response = client.post("/api/case-file", json={
+        "messages": msgs(story),
+        "context_overrides": {context_id: "The item was ordered online."},
+    })
+    assert response.status_code == 200, response.text
+    updated = response.json()
+    answer = next(q for q in updated["context"]["questions"] if q["id"] == context_id)
+    assert answer["status"] == "user_edited"
+    assert answer["answer"] == "The item was ordered online."
+    assert "The item was ordered online." in updated["structured_summary"]["narrative"]

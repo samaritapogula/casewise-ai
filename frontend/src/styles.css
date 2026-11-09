@@ -46,3 +46,7 @@
 .transcript-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:8px}
 .transcript-actions button{background:#eef4f4;color:#47616e;border:1px solid #cddfde;border-radius:7px;font-weight:800;font-size:11px;padding:9px 12px}
 .transcript-actions button:last-child{color:white;background:#19505a;border-color:#19505a}.transcript-actions button:disabled{opacity:.5}
+
+/* Keep the manual stop action visible while dictation auto-reconnects after pauses. */
+.transcript-actions .recording-stop{display:inline-flex;align-items:center;gap:6px;border-color:#d6a6a2;background:#fff1ef;color:#a33d32}
+.transcript-review textarea[readonly]{background:#f8fbfb}

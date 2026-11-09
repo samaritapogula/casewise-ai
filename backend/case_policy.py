@@ -40,7 +40,13 @@ def get_case_policy(category: str, subtype: str = "") -> dict:
         if item["id"] in seen:
             continue
         seen.add(item["id"])
-        questions.append({key: item[key] for key in ("id", "question", "label", "purpose")})
+        question = {key: item[key] for key in ("id", "question", "label", "purpose")}
+        # Only curated config patterns are allowed to suggest a reported answer.
+        patterns = item.get("source_patterns", [])
+        if isinstance(patterns, list):
+            question["source_patterns"] = [p for p in patterns[:4]
+                                          if isinstance(p, str) and 0 < len(p) <= 220]
+        questions.append(question)
         if len(questions) >= _MAX_QUESTIONS:
             break
     combined["detail_questions"] = questions

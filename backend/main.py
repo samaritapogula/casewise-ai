@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from io import BytesIO
+from typing import Any
 import os
 from xml.sax.saxutils import escape
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
@@ -19,6 +20,8 @@ from .engine import analyze, make_draft
 from .knowledge import SOURCES, VERIFIED_ON
 from .llm import conversational_followup, is_configured
 from .workflow import extract_case, practice_argument
+from .case_builder import build_case
+from .case_export import case_as_json, case_as_pdf
 
 app = FastAPI(title="CaseWise AI", version="0.1.0", description="Cautious Indian civil-dispute intake demo")
 origins = [origin.strip() for origin in os.getenv("CASEWISE_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",") if origin.strip()]
@@ -36,7 +39,17 @@ class Request(BaseModel):
     profile: dict[str, str] = Field(default_factory=dict)
     language: str = Field(default="en", pattern="^en$")  # English-only interface; old non-English client requests are rejected.
     document_type: str = Field(default="request", pattern="^(request|notice|complaint|reply|application)$")
-    confirmed: bool = False  # Explicit user review, required for PDF generation.
+    confirmed: bool = False  # Explicit user review, required for document drafting.
+    case_id: str = Field(default="", max_length=48)
+    case_overrides: dict[str, str] = Field(default_factory=dict)
+    timeline_edits: list[dict[str, Any]] | None = Field(default=None, max_length=14)
+    evidence_edits: list[dict[str, Any]] | None = Field(default=None, max_length=18)
+    asked_fields: list[str] = Field(default_factory=list, max_length=16)
+    resolved_issues: list[str] = Field(default_factory=list, max_length=16)
+    story_override: str = Field(default="", max_length=1400)
+    reviewed: bool = False
+    ai_suggestion: dict[str, Any] | None = None
+    export_format: str = Field(default="pdf", pattern="^(pdf|json)$")
 
 
 class PracticeRequest(Request):
@@ -57,30 +70,80 @@ def get_sources():
     return {"verified_on": VERIFIED_ON, "sources": list(SOURCES.values())}
 
 
+def build_case_from_request(request: Request, ai: dict | None = None) -> dict:
+    return build_case(
+        as_dict(request), request.profile, request.category, ai,
+        case_overrides=request.case_overrides,
+        timeline_edits=request.timeline_edits,
+        evidence_edits=request.evidence_edits,
+        asked_fields=request.asked_fields,
+        resolved_issues=request.resolved_issues,
+        story_override=request.story_override,
+        reviewed=request.reviewed,
+        case_id=request.case_id,
+    )
+
+
 @app.post("/api/analyze")
 def analyze_case(request: Request):
     try:
         preliminary = analyze(as_dict(request), request.profile, request.category)
         proposed = extract_case(as_dict(request)) if is_configured() and not preliminary["needs_lawyer"] else None
         chosen = request.category
-        if chosen == "auto" and proposed and proposed["category"] != "other":
+        if chosen == "auto" and proposed and proposed.get("category") not in ("other", None):
             chosen = proposed["category"]
         data = analyze(as_dict(request), request.profile, chosen)
         data["summary"]["ai_extracted_case"] = proposed
         if proposed and proposed.get("risk_flag") in ("urgent", "criminal"):
             data["needs_lawyer"] = True
             data["next_steps"] = ["Consult a qualified local lawyer promptly and preserve relevant dates, documents and notices."]
-            data["assistant_message"] = "This may involve an urgent or criminal matter beyond this civil-dispute prototype. Seek prompt help from a qualified local lawyer; do not rely on this chatbot."
             data["safety_flags"].insert(0, "Potential urgent/criminal issue flagged by AI; this prototype cannot assess it. Seek professional advice.")
+        case = build_case(
+            as_dict(request), request.profile, chosen, proposed,
+            case_overrides=request.case_overrides,
+            timeline_edits=request.timeline_edits,
+            evidence_edits=request.evidence_edits,
+            asked_fields=request.asked_fields,
+            resolved_issues=request.resolved_issues,
+            story_override=request.story_override,
+            reviewed=request.reviewed,
+            case_id=request.case_id,
+        )
+        data["case_file"] = case
         data["language"] = "en"
         if data["needs_lawyer"]:
-            answer = data["assistant_message"]
+            data["assistant_message"] = "This may be urgent or outside the civil-only prototype. Seek help from a qualified local lawyer promptly; do not rely on generated legal advice."
         else:
-            answer = (proposed.get("followup_question") if proposed else None) or conversational_followup(data, as_dict(request))
-        if answer and not data["needs_lawyer"]:
-            data["assistant_message"] = answer
-            data["mode"] = "gemini-assisted"
+            data["assistant_message"] = case["next_question"]["text"]
+            data["mode"] = "gemini-assisted" if proposed else "guided-demo"
         return data
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/case-file")
+def get_case_file(request: Request):
+    """Recompute a case from the current conversation and user corrections; no server state."""
+    try:
+        return build_case_from_request(request, request.ai_suggestion)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/case-export")
+def export_case_file(request: Request):
+    """Only export case files after explicit user review; never a legal filing."""
+    if not request.reviewed or not request.story_override.strip():
+        raise HTTPException(status_code=422, detail="Review and confirm a nonempty case narrative before export.")
+    try:
+        case = build_case_from_request(request, request.ai_suggestion)
+        if request.export_format == "json":
+            return Response(content=case_as_json(case), media_type="application/json",
+                            headers={"Content-Disposition": 'attachment; filename="casewise-case-file.json"',
+                                     "Cache-Control": "no-store"})
+        return Response(content=case_as_pdf(case), media_type="application/pdf",
+                        headers={"Content-Disposition": 'attachment; filename="casewise-case-file.pdf"',
+                                 "Cache-Control": "no-store"})
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

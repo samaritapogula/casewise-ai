@@ -170,5 +170,5 @@ def test_legal_plan_intake_follows_actual_missing_fact():
     assert data.status_code == 200, data.text
     result = data.json()
     assert result["case_file"]["next_question"]["field"] == "event_date"
-    assert result["legal_plan"]["stage"]["code"] == "intake"
+    assert result["legal_plan"]["stage"]["code"] == "preliminary"  # Main facts known; refusal date still needs clarification.
     assert "event_date" in result["legal_plan"]["stage"]["missing_followups"]

@@ -356,8 +356,11 @@ def build_case(
         elif matching in ("location", "desired_resolution", "user_role", "evidence", "key_event"):
             fields[matching] = response
     fields.update(overrides)
-    # A field is user-entered when explicitly provided in an editable form.
-    provided = set((profile or {}).keys()) | set(overrides.keys())
+    # Empty default frontend fields must not convert user-reported facts into
+    # user-confirmed edits. Only nonempty explicitly supplied values count.
+    provided = {key for key, value in (profile or {}).items() if _present(str(value or ""))} | {
+        key for key, value in overrides.items() if _present(value)
+    }
     facts = {}
     for key, value in fields.items():
         source_phrase = value.replace(" (mentioned by user; availability unconfirmed)", "")

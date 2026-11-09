@@ -129,134 +129,116 @@ def test_document_types_are_drafts(kind, expected):
 
 
 def test_practice_fallback_and_endpoint_no_key(monkeypatch):
-    monkeypatch.delenv('GEMINI_API_KEY', raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     from backend.workflow import practice_argument
-    case = analyze([{'role':'user','content':'A seller refused to refund my product.'}])
-    reply = practice_argument(case, 'I have the invoice and email replies.', 'en')
-    assert reply['mode'] == 'guided-demo'
-    assert 'opponent_question' in reply
-    r = client.post('/api/practice', json={
-        'messages':[{'role':'user','content':'A seller refused to refund my product.'}],
-        'language':'hi','argument':'I have the invoice and email replies.'})
-    assert r.status_code == 200 and r.json()['mode'] == 'guided-demo'
+    case = analyze([{"role": "user", "content": "A seller refused to refund my product."}])
+    reply = practice_argument(case, "I have the invoice and email replies.")
+    assert reply["mode"] == "guided-demo"
+    assert "opponent_question" in reply
+    result = client.post("/api/practice", json={
+        "messages": [{"role": "user", "content": "A seller refused to refund my product."}],
+        "argument": "I have the invoice and email replies."
+    })
+    assert result.status_code == 200
+    assert result.json()["mode"] == "guided-demo"
 
 
-def test_multilingual_input_supported_with_transparent_fallback(monkeypatch):
-    monkeypatch.delenv('GEMINI_API_KEY', raising=False)
-    r = client.post('/api/analyze', json={
-        'messages':[{'role':'user','content':'मुझे दुकान से रिफंड नहीं मिला है'}], 'language':'hi'})
-    assert r.status_code == 200
-    data = r.json()
-    assert data['language'] == 'hi'
-    assert data['summary']['ai_extracted_case'] is None
-    assert data['mode'] == 'guided-demo'
+def test_english_only_chat_and_reject_other_language_selection(monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    messages = [{"role": "user", "content": "I want a refund for a broken laptop."}]
+    result = client.post("/api/analyze", json={"messages": messages})
+    assert result.status_code == 200
+    assert result.json()["language"] == "en"
+    assert result.json()["summary"]["category"] == "consumer"
+    assert result.json()["mode"] == "guided-demo"
+    for old_language in ("hi", "te", "ta", "bn", "mr"):
+        rejected = client.post("/api/analyze", json={"messages": messages, "language": old_language})
+        assert rejected.status_code == 422
 
 
 def test_practice_blocks_urgent():
-    r = client.post('/api/practice', json={
-        'messages':[{'role':'user','content':'There is a court summons and hearing tomorrow'}],
-        'argument':'I believe the document has mistakes.'})
-    assert r.status_code == 422
-
-
-@pytest.mark.parametrize("language", ["en", "hi", "te", "ta", "bn", "mr"])
-def test_all_six_languages_accepted_in_api(language, monkeypatch):
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    response = client.post("/api/analyze", json={"messages": [{"role":"user", "content":"I need a refund for a damaged product."}], "language": language})
-    assert response.status_code == 200
-    result = response.json()
-    assert result["language"] == language
-    assert result["summary"]["category"] == "consumer"
-    assert result["mode"] == "guided-demo"
-
-
-def test_unknown_language_is_rejected():
-    response = client.post("/api/analyze", json={"messages": [{"role":"user", "content":"I need a refund."}], "language": "xx"})
-    assert response.status_code == 422
-
-
-@pytest.mark.parametrize("language,example,expected", [
-    ("hi", "कौन से दस्तावेज़ हैं?", True),
-    ("mr", "तुमच्याकडे पुरावा आहे का?", True),
-    ("te", "మీ వద్ద రసీదు ఉందా?", True),
-    ("ta", "உங்களிடம் ரசீது உள்ளதா?", True),
-    ("bn", "আপনার কাছে রসিদ আছে?", True),
-    ("hi", "Can you show the receipt?", False),
-])
-def test_native_script_signal(language, example, expected):
-    from backend.workflow import is_target_script
-    assert is_target_script(example, language) is expected
-
-
-def test_gemini_case_extraction_requires_selected_script(monkeypatch):
-    from backend import workflow
-    def fake_call(instruction, payload, max_tokens):
-        assert payload["selected_response_language"] == "Tamil"
-        assert "SELECTED RESPONSE LANGUAGE" in instruction
-        return {"category": "consumer", "story_english": "The user reports a missing refund.",
-                "timeline": [], "evidence": [], "position": "Ask the seller for a written response.",
-                "missing_questions": [], "followup_question": "What date did this happen?", "risk_flag": "none"}
-    monkeypatch.setattr(workflow, "_gemini_json", fake_call)
-    output = workflow.extract_case([{"role":"user", "content":"I want a refund."}], "ta")
-    assert output["followup_question"] == ""
-    assert output["category"] == "consumer"
+    result = client.post("/api/practice", json={
+        "messages": [{"role": "user", "content": "There is a court summons and hearing tomorrow"}],
+        "argument": "I believe the document has mistakes."
+    })
+    assert result.status_code == 422
 
 
 def test_pdf_document_type_is_forwarded_from_api():
     response = client.post("/api/draft", json={
-        "messages": [{"role":"user","content":"I purchased a damaged laptop from a seller for INR 10000."}],
-        "category": "consumer", "language": "ta", "document_type":"notice", "confirmed": True,
-        "profile":{"counterparty":"Example Shop", "location":"Kanpur", "event_date":"Not known",
-                   "desired_resolution":"Refund", "facts_narrative":"I bought a damaged laptop."}})
+        "messages": [{"role": "user", "content": "I purchased a damaged laptop from a seller for INR 10000."}],
+        "category": "consumer", "document_type": "notice", "confirmed": True,
+        "profile": {"counterparty": "Example Shop", "location": "Kanpur", "event_date": "Not known",
+                    "desired_resolution": "Refund", "facts_narrative": "I bought a damaged laptop."}
+    })
     assert response.status_code == 200, response.text
     text = " ".join(page.extract_text() for page in PdfReader(BytesIO(response.content)).pages)
     assert "DRAFT NOTICE OUTLINE" in text
     assert "LAWYER REVIEW REQUIRED" in text
 
 
-def test_gemini_multilingual_risk_flag_escalates(monkeypatch):
+def test_gemini_detected_risk_escalates(monkeypatch):
     from backend import main
     monkeypatch.setattr(main, "is_configured", lambda: True)
-    monkeypatch.setattr(main, "extract_case", lambda messages, language: {
-        "category": "other", "risk_flag": "criminal", "followup_question": "क्या हुआ?"})
-    response = client.post("/api/analyze", json={"messages": [{"role": "user", "content": "मेरे भाई को पुलिस ने गिरफ्तार किया"}], "language": "hi"})
+    monkeypatch.setattr(main, "extract_case", lambda messages: {
+        "category": "other", "risk_flag": "criminal", "followup_question": "What happened?"
+    })
+    response = client.post("/api/analyze", json={
+        "messages": [{"role": "user", "content": "There is a legal dispute about my brother."}]
+    })
     assert response.status_code == 200
     data = response.json()
     assert data["needs_lawyer"] is True
     assert data["mode"] == "guided-demo"
     assert "qualified local lawyer" in data["assistant_message"]
-    assert data["next_steps"]
 
 
-def test_gemini_followup_uses_selected_bengali_language(monkeypatch):
+def test_gemini_case_extraction_requests_english(monkeypatch):
+    from backend import workflow
+    def fake_call(instruction, payload, max_tokens):
+        assert payload["response_language"] == "English"
+        assert "in English" in instruction
+        return {"category": "consumer", "story_english": "The user reports a missing refund.",
+                "timeline": [], "evidence": [], "position": "Request a written response from the seller.",
+                "missing_questions": [], "followup_question": "When did you purchase the item?",
+                "risk_flag": "none"}
+    monkeypatch.setattr(workflow, "_gemini_json", fake_call)
+    result = workflow.extract_case([{"role": "user", "content": "I want a refund."}])
+    assert result["followup_question"] == "When did you purchase the item?"
+    assert result["category"] == "consumer"
+
+
+def test_gemini_followup_uses_english(monkeypatch):
     import json
     from backend import llm
-    monkeypatch.setenv('GEMINI_API_KEY', 'synthetic-test-key')
+    monkeypatch.setenv("GEMINI_API_KEY", "synthetic-test-key")
     seen = {}
     class FakeResponse:
         def __enter__(self): return self
         def __exit__(self, *_): return False
         def read(self, _):
-            return json.dumps({'candidates':[{'content':{'parts':[{'text':'আপনার কাছে ক্রয়ের রসিদ আছে?'}]}}]}).encode('utf-8')
+            return json.dumps({"candidates": [{"content": {"parts": [{"text": "Do you have the purchase receipt?"}]}}]}).encode("utf-8")
     def fake_urlopen(request, timeout):
-        seen['request'] = json.loads(request.data.decode('utf-8'))
+        seen["request"] = json.loads(request.data.decode("utf-8"))
         return FakeResponse()
-    monkeypatch.setattr(llm.urllib.request, 'urlopen', fake_urlopen)
-    analysis = {'summary': {'category_label': 'Consumer complaint & refund', 'missing_details': ['Other party']}, 'assistant_message': 'What evidence do you have?'}
-    answer = llm.conversational_followup(analysis, [{'role':'user','content':'I need a refund'}], 'bn')
-    assert answer == 'আপনার কাছে ক্রয়ের রসিদ আছে?'
-    assert json.loads(seen['request']['contents'][0]['parts'][0]['text'])['response_language'] == 'Bengali'
+    monkeypatch.setattr(llm.urllib.request, "urlopen", fake_urlopen)
+    analysis = {"summary": {"category_label": "Consumer complaint & refund", "missing_details": ["Other party"]},
+                "assistant_message": "What evidence do you have?"}
+    answer = llm.conversational_followup(analysis, [{"role": "user", "content": "I need a refund"}])
+    assert answer == "Do you have the purchase receipt?"
+    assert json.loads(seen["request"]["contents"][0]["parts"][0]["text"])["response_language"] == "English"
 
 
-def test_wrong_script_gemini_followup_falls_back(monkeypatch):
+def test_gemini_followup_rejects_unverified_section(monkeypatch):
     import json
     from backend import llm
-    monkeypatch.setenv('GEMINI_API_KEY', 'synthetic-test-key')
+    monkeypatch.setenv("GEMINI_API_KEY", "synthetic-test-key")
     class FakeResponse:
         def __enter__(self): return self
         def __exit__(self, *_): return False
         def read(self, _):
-            return json.dumps({'candidates':[{'content':{'parts':[{'text':'What proof do you have?'}]}}]}).encode('utf-8')
-    monkeypatch.setattr(llm.urllib.request, 'urlopen', lambda *_args, **_kwargs: FakeResponse())
-    analysis = {'summary': {'category_label': 'Consumer complaint', 'missing_details': ['Evidence']}, 'assistant_message': 'Offline fallback'}
-    assert llm.conversational_followup(analysis, [{'role':'user','content':'I need a refund'}], 'hi') is None
+            return json.dumps({"candidates": [{"content": {"parts": [{"text": "Section 9999 guarantees a refund."}]}}]}).encode("utf-8")
+    monkeypatch.setattr(llm.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
+    analysis = {"summary": {"category_label": "Consumer complaint", "missing_details": ["Evidence"]},
+                "assistant_message": "Offline fallback"}
+    assert llm.conversational_followup(analysis, [{"role": "user", "content": "I need a refund"}]) is None

@@ -37,6 +37,7 @@ def test_complete_initial_consumer_story_extracts_party_and_full_location():
     assert case["facts"]["desired_resolution"]["value"] == "a full refund"
     assert case["completeness"]["completed"] == 7
     assert case["next_question"]["field"] == "event_date"
+    assert "The seller refused to provide a refund or replacement" in case["next_question"]["text"]
 
 
 def test_multiple_events_keep_the_correct_dates_and_missing_refusal_date():
@@ -172,3 +173,30 @@ def test_legal_plan_intake_follows_actual_missing_fact():
     assert result["case_file"]["next_question"]["field"] == "event_date"
     assert result["legal_plan"]["stage"]["code"] == "preliminary"  # Main facts known; refusal date still needs clarification.
     assert "event_date" in result["legal_plan"]["stage"]["missing_followups"]
+
+
+
+def test_date_question_identifies_event_and_accepts_reply_without_polluting_story():
+    initial = build_case(user(BUYER_STORY))
+    conversation = [
+        *user(BUYER_STORY),
+        {"role": "assistant", "content": initial["next_question"]["text"]},
+        {"role": "user", "content": "22 October 2026"},
+    ]
+    updated = build_case(conversation, asked_fields=["event_date"])
+    assert updated["facts"]["event_date"]["value"] == "22 October 2026"
+    assert updated["next_question"]["field"] != "event_date"
+    assert "22 October 2026" not in updated["narrative"]["text"]
+
+
+def test_unknown_event_date_is_recorded_as_unknown_not_fabricated():
+    initial = build_case(user(BUYER_STORY))
+    conversation = [
+        *user(BUYER_STORY),
+        {"role": "assistant", "content": initial["next_question"]["text"]},
+        {"role": "user", "content": "I don't know"},
+    ]
+    updated = build_case(conversation, asked_fields=["event_date"])
+    assert "event_date" in updated["unknown_fields"]
+    assert updated["facts"]["event_date"]["value"] == ""
+    assert updated["next_question"]["field"] != "event_date"

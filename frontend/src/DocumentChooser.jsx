@@ -9,7 +9,8 @@ export const documentTypes = [
   { value: 'application', label: 'Application for assistance', description: 'Request help from a relevant institution, subject to eligibility.', icon: FileCheck2 },
 ];
 
-export default function DocumentChooser({ onChoose, disabled = false }) {
+export default function DocumentChooser({ onChoose, disabled = false, recommendations = [] }) {
+  const relevance = Object.fromEntries(recommendations?.map(item => [item.type,item]) || []);
   return <section className="document-chooser" aria-label="Choose what document to prepare">
     <div className="document-chooser-heading">
       <h2>What would you like to prepare?</h2>
@@ -20,7 +21,11 @@ export default function DocumentChooser({ onChoose, disabled = false }) {
         <button key={value} type="button" disabled={disabled} onClick={() => onChoose(value)}
           className="document-choice">
           <Icon size={18} aria-hidden="true"/>
-          <span><strong>{label}</strong><small>{description}</small></span>
+          <span><strong>{label}</strong><small>{description}</small>
+            {relevance[value] && <small className={relevance[value].status === 'recommended' ? 'document-suggested' : 'document-guidance'}>
+              {relevance[value].status === 'recommended' ? 'Suggested based on your reported facts: ' : 'Guidance: '}{relevance[value].reason}
+            </small>}
+          </span>
         </button>
       ))}
     </div>

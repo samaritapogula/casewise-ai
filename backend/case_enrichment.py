@@ -24,6 +24,7 @@ def answer_status(value: str) -> str:
 
 
 EVENT_DATE_FOLLOWUP_PREFIX = "When did this reported event happen: "
+EVENT_DATE_CLARIFY_PREFIX = "To clarify the date of this reported event: "
 
 
 def match_primary_question(question: str, primary_questions: dict[str, str]) -> str | None:
@@ -32,7 +33,8 @@ def match_primary_question(question: str, primary_questions: dict[str, str]) -> 
     for field, template in primary_questions.items():
         if normalized == template:
             return field
-    if normalized.startswith(EVENT_DATE_FOLLOWUP_PREFIX) and normalized.endswith("If you do not know, say 'not known'."):
+    if (normalized.startswith((EVENT_DATE_FOLLOWUP_PREFIX, EVENT_DATE_CLARIFY_PREFIX))
+            and normalized.endswith("If you do not know, say 'not known'.")):
         return "event_date"
     return None
 

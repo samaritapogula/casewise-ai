@@ -44,8 +44,25 @@ def build_context(
                 continue
             response = _sanitize(current.get("content"), 500)
             source_message = index
+        if identifier not in entered and not response:
+            # Reuse only a sentence actually supplied by the user and matching
+            # the curated subject-specific pattern. No LLM guesses or implied
+            # contract terms are treated as evidence.
+            patterns = item.get("source_patterns", [])
+            for index, message in enumerate(messages):
+                if message.get("role") != "user":
+                    continue
+                for sentence in re.split(r"(?<=[.!?])\s+|\n+", _sanitize(message.get("content"), 2000)):
+                    snippet = _sanitize(sentence, 330)
+                    if len(snippet) > 12 and any(re.search(pattern, snippet, re.I)
+                                                 for pattern in patterns):
+                        response = snippet
+                        source_message = index
+                        break
+                if response:
+                    break
         if identifier in entered:
-            # Empty override means intentionally cleared. It takes precedence.
+            # An explicit correction, including a deliberate blank, wins.
             response = _sanitize(entered[identifier])
             source_message = None
         status = answer_status(response)

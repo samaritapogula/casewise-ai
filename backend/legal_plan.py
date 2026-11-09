@@ -10,6 +10,7 @@ from datetime import date
 from typing import Any
 
 from .adaptive_planning import build_adaptive_plan
+from .case_policy import get_regional_source_ids
 
 SOURCE_REVIEWED = "2026-11-09"
 SOURCES = {
@@ -165,9 +166,9 @@ def build_legal_plan(case: dict, *, completed_actions: dict[str, bool] | None = 
 
     # Official registry: no source URLs or legal citations come from the LLM.
     source_ids = list(guide["source_ids"])
-    location = _fact(case, "location").lower()
-    if category == "property" and any(p in location for p in ("uttar pradesh", "kanpur", "lucknow", "noida", "ghaziabad", "varanasi")):
-        source_ids.append("up_tenancy")
+    for source_id in get_regional_source_ids(category, _fact(case, "location")):
+        if source_id in SOURCES and source_id not in source_ids:
+            source_ids.append(source_id)
     sources = [{**SOURCES[key], "reviewed_on": SOURCE_REVIEWED,
                 "verification": "Official page checked manually; current applicability not established."}
                for key in source_ids]
@@ -223,6 +224,8 @@ def build_legal_plan(case: dict, *, completed_actions: dict[str, bool] | None = 
         "source_ids": [ref for ref in route_sources if ref in SOURCES],
         "eligibility_status": "Not assessed; possible channel only.",
     } for route_id, title, reason, route_sources in guide["routes"]])
+    if adaptive["stage"]["code"] == "intake":
+        routes = []  # Explain options later, not as premature filing instructions.
     if risk:
         routes = [{
             "id": "urgent", "title": "Qualified local legal assistance",

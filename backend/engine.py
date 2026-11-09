@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from typing import Any
 from .knowledge import CATEGORIES, SOURCES, VERIFIED_ON, ALLOWED_CATEGORIES
+from .intake_extraction import extract_counterparty, extract_location
 
 CRIMINAL_PATTERNS = (
     r"\b(murder|rape|kidnapp(?:ed|ing)?|sexual assault|arrested|police custody|bail application|fir registered)\b",
@@ -44,10 +45,19 @@ def profile_from_messages(messages: list[dict[str, str]], profile: dict[str, Any
         match = AMOUNT_PATTERN.search(user_text)
         if match:
             result["amount"] = "₹" + match.group(1)
+    if not result["counterparty"]:
+        result["counterparty"] = extract_counterparty(
+            [clean(m.get("content"), 2000) for m in messages if m.get("role") == "user"],
+            select_category(user_text),
+        )
     if not result["location"]:
-        match = STATE_HINT.search(user_text)
-        if match:
-            result["location"] = match.group(1)
+        result["location"] = extract_location(
+            [clean(m.get("content"), 2000) for m in messages if m.get("role") == "user"],
+        )
+        if not result["location"]:
+            match = STATE_HINT.search(user_text)
+            if match:
+                result["location"] = match.group(1)
     if not result["evidence"]:
         matches = [term for term in EVIDENCE_MARKERS if re.search(r"\b" + re.escape(term) + r"s?\b", user_text, re.I)]
         if matches:

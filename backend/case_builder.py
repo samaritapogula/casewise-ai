@@ -119,6 +119,66 @@ def _subtype(category: str, text: str, override: str = "") -> dict:
     return {"code": "", "label": "Not yet specified", "status": "missing"}
 
 
+# A timeline is for events, not every sentence in the chat. Deliberately
+# conservative: false negatives can be added by the user; false positives
+# (a party's name presented as an event) undermine trust.
+EVENT_PATTERN = re.compile(
+    r"\b(?:paid|purchased|bought|ordered|rented|signed|moved out|vacated|"
+    r"handed over|delivered|arrived|received|returned|refunded|refused|denied|"
+    r"withheld|complained|contacted|emailed|sent|requested|"
+    r"terminated|resigned|dismissed|fired|repaired|damaged|broke|"
+    r"charged|deducted|issued|completed|supplied|cancelled|canceled|"
+    r"breached|overdue|defaulted|failed to pay|did not pay|not paid|"
+    r"has not paid|have not paid|not returned|has not returned|"
+    r"haven't returned|hasn't returned|did not return|"
+    r"didn't return|not received|has not received|didn't receive|"
+    r"hasn't received)\b", re.I
+)
+NON_EVENT_START = re.compile(
+    r"^\s*(?:i\s+(?:want|wish|need|hope|would like|am seeking|have (?:the|an?|my|"
+    r"copies of|proof of))\b|my\s+(?:goal|desired result)\b|"
+    r"please\s+|could you\s+|what should\s+|how can\s+)", re.I
+)
+
+
+def _event_segments(messages: list[dict]) -> list[tuple[int, str, str]]:
+    """Produce distinct candidate event clauses with their exact spoken dates."""
+    found = []
+    seen = set()
+    for index, message in enumerate(messages):
+        if message.get("role") != "user":
+            continue
+        original = _value(message.get("content"), 2000)
+        # Do not assign one date to two separate actions divided by 'but'.
+        for sentence in re.split(r"(?<=[.!?])\s+|\n+", original):
+            for clause in re.split(r"\s*,?\s*\b(?:but|however)\b\s+", sentence, flags=re.I):
+                segment = _value(clause, 420).strip(" .,:;")
+                if len(segment) < 8 or segment.endswith("?"):
+                    continue
+                if NON_EVENT_START.search(segment) or not EVENT_PATTERN.search(segment):
+                    continue
+                identity = re.sub(r"\s+", " ", segment).casefold()
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                match = DATE_RE.search(segment) or RELATIVE_DATE_RE.search(segment)
+                found.append((index, segment, match.group(0) if match else ""))
+                if len(found) >= 12:
+                    return found
+    return found
+
+
+def _sort_events(events: list[dict]) -> list[dict]:
+    """Only order by date when every event has an unambiguous calendar date.
+
+    Otherwise keep the conversation order; unknown-date events cannot safely
+    be placed on a chronological axis.
+    """
+    if events and all(_date_sort(event["date"]) for event in events):
+        return sorted(events, key=lambda event: _date_sort(event["date"]))
+    return events
+
+
 def _timeline(messages: list[dict], ai: dict | None, edits: list[dict] | None) -> list[dict]:
     if edits is not None:
         valid = []
@@ -138,46 +198,45 @@ def _timeline(messages: list[dict], ai: dict | None, edits: list[dict] | None) -
                 "source_message": row.get("source_message") if isinstance(row.get("source_message"), int) else None,
                 "source_excerpt": _value(row.get("source_excerpt"), 160),
             })
-        return sorted(valid, key=lambda e: (not bool(_date_sort(e["date"])), _date_sort(e["date"]) or "", e["id"]))
+        return _sort_events(valid)
 
     events = []
+    for n, (index, segment, date) in enumerate(_event_segments(messages)):
+        events.append({
+            "id": "m%d-e%d" % (index, n),
+            "date": date,
+            "event": segment,
+            "date_status": "explicit" if _date_sort(date) else "relative_or_unknown",
+            "status": "reported",
+            "source_message": index,
+            "source_excerpt": _value(messages[index].get("content"), 160),
+        })
+    # If there are no user-identifiable events, show NO timeline rather than
+    # smuggling potentially invented Gemini suggestions into a factual chronology.
+    return _sort_events(events)
+
+
+def _narrative_messages(messages: list[dict]) -> list[dict]:
+    """Exclude short field-only follow-up answers from the general case narrative.
+
+    They remain available to the corresponding structured field and source
+    provenance, but should not become an awkward new sentence in the story.
+    """
+    cleaned = []
+    questions = {question.casefold() for question in QUESTIONS.values()}
     for index, message in enumerate(messages):
         if message.get("role") != "user":
             continue
         text = _value(message.get("content"), 2000)
-        for piece in re.split(r"(?<=[.!?])\s+|\n+", text):
-            segment = _value(piece, 420)
-            if len(segment) < 16 or segment.endswith("?") or segment.lower().startswith(("what should", "how can", "please help")):
-                continue
-            match = DATE_RE.search(segment) or RELATIVE_DATE_RE.search(segment)
-            date = match.group(0) if match else ""
-            events.append({
-                "id": "m%d-e%d" % (index, len(events)),
-                "date": date,
-                "event": segment,
-                "date_status": "explicit" if _date_sort(date) else "relative_or_unknown",
-                "status": "reported",
-                "source_message": index,
-                "source_excerpt": text[:160],
-            })
-            if len(events) >= 12:
-                break
-        if len(events) >= 12:
-            break
-    # AI may suggest an event, but only as an explicitly unverified item.
-    if not events and ai:
-        for i, item in enumerate((ai.get("timeline") or [])[:4]):
-            if isinstance(item, dict) and _value(item.get("event")):
-                events.append({
-                    "id": "suggestion-%d" % i,
-                    "date": _value(item.get("date"), 80),
-                    "event": _value(item.get("event"), 420),
-                    "date_status": "unverified",
-                    "status": "ai_suggested",
-                    "source_message": None,
-                    "source_excerpt": "",
-                })
-    return sorted(events, key=lambda e: (not bool(_date_sort(e["date"])), _date_sort(e["date"]) or "", e["id"]))
+        prev = messages[index - 1] if index else {}
+        was_field_answer = (
+            prev.get("role") == "assistant"
+            and _value(prev.get("content"), 500).casefold() in questions
+        )
+        if was_field_answer and len(text) < 140 and not EVENT_PATTERN.search(text):
+            continue
+        cleaned.append(message)
+    return cleaned
 
 
 def _evidence(messages: list[dict], edits: list[dict] | None) -> list[dict]:
@@ -299,6 +358,7 @@ def build_case(
     base = original["profile_used"]
     overrides = {k: _value(v, 500) for k, v in (case_overrides or {}).items()
                  if k in FIELD_LABELS or k == "subtype"}
+    narrative_messages = _narrative_messages(messages)
     fields = {
         "counterparty": base["counterparty"],
         "location": base["location"],
@@ -307,7 +367,7 @@ def build_case(
         "evidence": base["evidence"],
         "desired_resolution": base["desired_resolution"],
         "user_role": "",
-        "key_event": _value(draft_narrative(messages), 500),
+        "key_event": _value(draft_narrative(narrative_messages), 500),
     }
     # Suggest user role only when straightforward, not an assertion of legal standing.
     role_patterns = [
@@ -401,7 +461,7 @@ def build_case(
         "I've noted the available information. Please review the case file and correct any missing or inconsistent details."
     )
 
-    story = _value(story_override, 1400) or _value((ai or {}).get("story_english"), 1400) or _value(draft_narrative(messages), 1400)
+    story = _value(story_override, 1400) or _value((ai or {}).get("story_english"), 1400) or _value(draft_narrative(narrative_messages), 1400)
     if not story:
         story = "A factual account has not yet been provided."
     story_status = "user_edited" if story_override.strip() else "ai_suggested" if (ai or {}).get("story_english") else "reported"

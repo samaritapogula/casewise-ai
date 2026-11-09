@@ -180,3 +180,40 @@ Type a **fictional** dispute (for example a rental deposit not returned), answer
 
 Automated checks: \`python -m pytest -q\`, then \`cd frontend && npm test && npm run build\`. These are functional tests, **not** validation of legal accuracy. Human legal review remains necessary.
 
+
+
+## Phase 3 — Legal Position & Personalized Action Plan
+
+The **Action plan** tab adds all eight approved features to the Phase 2 case-file workflow:
+
+- **A — Legal position:** A cautious category-specific explanation and questions to check, not a legal decision or prediction.
+- **B — Official laws and sources:** A fixed whitelist of official Indian legal/statute and government-service URLs, manually reviewed on **9 November 2026**. Their inclusion does **not** prove a statute applies to the user's facts, and they are not revalidated live on each request.
+- **C — Personalized steps:** Ordered tasks use the current Phase 2 case category, missing facts, reported evidence and possible urgency.
+- **D — Supporting information and limitations:** Shows **reported** supporting material, conflicting statements and evidence gaps. The heading deliberately does not call unverified evidence a legal strength.
+- **E — Appropriate channels:** Offers possible dispute-resolution or government-service starting points, subject to eligibility and jurisdiction checks (not an instruction to file).
+- **F — Urgency and lawyer escalation:** Time-sensitive and criminal issues are steered toward qualified help; normal filing-oriented task suggestions are suppressed in those cases.
+- **G — PDF action plan:** Requires explicit user acknowledgement and includes current checklist status, source links and all legal disclaimers.
+- **H — Interactive checklist:** User-marked progress during the current session. Marking a task complete does not mean legal compliance.
+
+**Supported issue categories:** Property/rental, consumer/refund, employment/pay and contract/payment. Civil cases outside these categories are deliberately routed to human triage. For property, the Uttar Pradesh tenancy statute appears only when the reported location suggests UP, and the app still requires a local lawyer to check scope and applicability.
+
+**New endpoints:**
+- \`POST /api/legal-plan\` computes guidance from the current Phase 2 case, user edits and optional \`completed_actions\` mapping.
+- \`POST /api/legal-plan/export\` produces an informational PDF when \`plan_reviewed=true\`.
+
+The backend's legal-source registry is deterministic (\`backend/legal_plan.py\`); Gemini cannot supply statute names, URLs, court jurisdictions, statutory deadlines or legal entitlements through that registry. The core \`/api/analyze\` now also includes \`legal_plan\` in its response without changing the existing \`case_file\`, \`/api/draft\` or \`/api/practice\` APIs.
+
+For local testing:
+\`\`\`bash
+cd ~/Desktop/casewise-ai
+git pull --ff-only origin main
+bash scripts/run_mac.sh
+\`\`\`
+Enter a **fictional** civil story, inspect the **Action plan** tab, mark one checklist task, review the acknowledgement and download the PDF. Also inspect the **Review & export** case file, document drafting and argument-practice features.
+
+\`\`\`bash
+python -m pytest -q
+cd frontend && npm test && npm run build
+\`\`\`
+
+**Legal safety:** This app does not verify that a law is applicable, that a user qualifies for a particular remedy or forum, or that a document is ready for filing. It must never invent a limitation period, venue or guaranteed outcome. Official government links can change, and live legal advice, deadlines and case-sensitive procedure require a qualified professional.

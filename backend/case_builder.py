@@ -13,6 +13,7 @@ from typing import Any
 
 from .engine import AMOUNT_PATTERN, clean, analyze, draft_narrative
 from .evidence_recognition import extract_evidence
+from .date_intake import reported_date_mentions, assess_event_date_reply, date_clarification_question
 from .case_enrichment import (build_context, explicit_unknown_fields, structured_facts_summary,
                               event_kind, match_primary_question, EVENT_DATE_FOLLOWUP_PREFIX)
 
@@ -128,8 +129,8 @@ def _subtype(category: str, text: str, override: str = "") -> dict:
 # (a party's name presented as an event) undermine trust.
 EVENT_PATTERN = re.compile(
     r"\b(?:paid|purchased|bought|ordered|rented|signed|moved out|vacated|"
-    r"handed over|delivered|arrived|received|returned|refunded|refused|denied|"
-    r"withheld|complained|contacted|emailed|sent|requested|"
+    r"handed over|delivered|arrived|received|returned|refunded|refus(?:e|es|ed|ing|al)|denied|"
+    r"withheld|complain(?:ed|t)|contacted|emailed|sent|requested|"
     r"terminated|resigned|dismissed|fired|repaired|damaged|broke|"
     r"charged|deducted|issued|completed|supplied|cancelled|canceled|"
     r"stopped working|stopped functioning|ceased working|malfunctioned|"
@@ -155,22 +156,32 @@ def _event_segments(messages: list[dict]) -> list[tuple[int, str, str]]:
         if message.get("role") != "user":
             continue
         original = _value(message.get("content"), 2000)
-        # Do not assign one date to two separate actions divided by 'but'.
+        # Never attach a date from one act to another act connected with
+        # 'and', 'but', or 'however'. Only split 'and' if BOTH parts have
+        # independent event verbs, so compound descriptions stay intact.
         for sentence in re.split(r"(?<=[.!?])\s+|\n+", original):
-            for clause in re.split(r"\s*,?\s*\b(?:but|however)\b\s+", sentence, flags=re.I):
-                segment = _value(clause, 420).strip(" .,:;")
-                if len(segment) < 8 or segment.endswith("?"):
-                    continue
-                if NON_EVENT_START.search(segment) or not EVENT_PATTERN.search(segment):
-                    continue
-                identity = re.sub(r"\s+", " ", segment).casefold()
-                if identity in seen:
-                    continue
-                seen.add(identity)
-                match = DATE_RE.search(segment) or RELATIVE_DATE_RE.search(segment)
-                found.append((index, segment, match.group(0) if match else ""))
-                if len(found) >= 12:
-                    return found
+            for part in re.split(r"\s*,?\s*\b(?:but|however)\b\s+", sentence, flags=re.I):
+                alternatives = re.split(r"\s+\band\b\s+", part, flags=re.I)
+                clauses = (alternatives if len(alternatives) > 1
+                           and sum(bool(EVENT_PATTERN.search(p)) for p in alternatives) >= 2
+                           else [part])
+                for clause in clauses:
+                    segment = _value(clause, 420).strip(" .,:;")
+                    if len(segment) < 8 or segment.endswith("?"):
+                        continue
+                    if NON_EVENT_START.search(segment) or not EVENT_PATTERN.search(segment):
+                        continue
+                    identity = re.sub(r"\s+", " ", segment).casefold()
+                    if identity in seen:
+                        continue
+                    seen.add(identity)
+                    mention = next(iter(reported_date_mentions(segment)), None)
+                    date = str(mention["text"]) if mention else ""
+                    if mention and mention["kind"] == "partial":
+                        date += " (year not supplied)"
+                    found.append((index, segment, date))
+                    if len(found) >= 12:
+                        return found
     return found
 
 
@@ -200,7 +211,7 @@ def _timeline(messages: list[dict], ai: dict | None, edits: list[dict] | None) -
                 "date": date,
                 "event": event,
                 "event_kind": event_kind(event),
-                "date_status": "explicit" if _date_sort(date) else "relative_or_unknown",
+                "date_status": "explicit" if _date_sort(date) else "partial" if "year not supplied" in date else "relative_or_unknown",
                 "status": "user_edited",
                 "source_message": row.get("source_message") if isinstance(row.get("source_message"), int) else None,
                 "source_excerpt": _value(row.get("source_excerpt"), 160),
@@ -214,7 +225,7 @@ def _timeline(messages: list[dict], ai: dict | None, edits: list[dict] | None) -
             "date": date,
             "event": segment,
             "event_kind": event_kind(segment),
-            "date_status": "explicit" if _date_sort(date) else "relative_or_unknown",
+            "date_status": "explicit" if _date_sort(date) else "partial" if "year not supplied" in date else "relative_or_unknown",
             "status": "reported",
             "source_message": index,
             "source_excerpt": _value(messages[index].get("content"), 160),
@@ -240,7 +251,13 @@ def _narrative_messages(messages: list[dict]) -> list[dict]:
             prev.get("role") == "assistant"
             and match_primary_question(prev.get("content"), QUESTIONS) is not None
         )
-        if was_field_answer and len(text) < 140 and not EVENT_PATTERN.search(text):
+        field_answer = match_primary_question(prev.get("content"), QUESTIONS) if was_field_answer else None
+        # A short answer to a date question is metadata about an event,
+        # not a replacement for the user's factual case narrative.
+        if was_field_answer and (
+            (field_answer == "event_date" and len(text) < 320)
+            or (len(text) < 140 and not EVENT_PATTERN.search(text))
+        ):
             continue
         cleaned.append(message)
     return cleaned
@@ -356,9 +373,20 @@ def build_case(
         r"not paid|has not paid|unpaid|failed to|damaged|broken|breached|overdue)\b",
         re.I,
     )
+    # Replies to date questions may mention a *different* event (such as
+    # a complaint). Do not let those replies replace the original disputed
+    # event or make their date the refusal / payment / eviction date.
+    date_answer_indices = {
+        i for i in range(1, len(messages))
+        if messages[i].get("role") == "user"
+        and messages[i - 1].get("role") == "assistant"
+        and match_primary_question(messages[i - 1].get("content"), QUESTIONS) == "event_date"
+    }
+    core_events = [row for row in event_segments if row[0] not in date_answer_indices]
+    chosen_events = core_events or event_segments
     central_event = next(
-        (segment for _, segment, _ in reversed(event_segments) if disputed.search(segment)),
-        event_segments[-1][1] if event_segments else draft_narrative(narrative_messages),
+        (segment for _, segment, _ in reversed(chosen_events) if disputed.search(segment)),
+        chosen_events[-1][1] if chosen_events else draft_narrative(narrative_messages),
     )
     fields = {
         "counterparty": base["counterparty"],
@@ -385,9 +413,11 @@ def build_case(
     if not fields["event_date"]:
         # Only the date attached to the selected key event may populate this
         # field. A purchase date must never silently become a refusal date.
-        event_date = DATE_RE.search(central_event) or RELATIVE_DATE_RE.search(central_event)
+        event_date = next(
+            (row for row in reported_date_mentions(central_event) if row["kind"] != "partial"), None,
+        )
         if event_date:
-            fields["event_date"] = event_date.group(0)
+            fields["event_date"] = str(event_date["text"])
     if not fields["desired_resolution"]:
         wishes = re.findall(r"\b(?:i want|i request|i need)\s+([^.!?\n]{4,140})", text, re.I)
         for wish in reversed(wishes):
@@ -396,28 +426,31 @@ def build_case(
                 break
     # A short answer immediately following a CaseWise follow-up may fill that
     # specific missing field. Refuse long/general text as a field value.
+    date_review: dict | None = None
     for i in range(1, len(messages)):
         previous = messages[i - 1]
         current = messages[i]
         if previous.get("role") != "assistant" or current.get("role") != "user":
             continue
-        question = _value(previous.get("content"), 500).lower()
-        response = _value(current.get("content"), 300)
-        if len(response) > 130 or response.endswith("?") or response.strip().lower() in ("yes", "no", "okay", "ok"):
-            continue
         matching = match_primary_question(previous.get("content"), QUESTIONS)
         if not matching or matching not in fields or fields[matching] or matching in overrides:
             continue
+        response = _value(current.get("content"), 300)
+        if not response or response.endswith("?") or len(response) > (300 if matching == "event_date" else 130):
+            continue
         if matching == "event_date":
-            detected = DATE_RE.search(response) or RELATIVE_DATE_RE.search(response)
-            fields[matching] = detected.group(0) if detected else ""
-        elif matching == "amount":
-            detected = AMOUNT_PATTERN.search(response)
-            fields[matching] = "₹" + detected.group(1) if detected else response if response.strip().lower() in ("not applicable", "n/a") else ""
-        elif matching == "counterparty":
-            fields[matching] = response if len(response.split()) <= 12 else ""
-        elif matching in ("location", "desired_resolution", "user_role", "evidence", "key_event"):
-            fields[matching] = response
+            if response.strip().casefold() not in ("yes", "no", "okay", "ok") or date_review:
+                date_review = assess_event_date_reply(response, central_event, date_review)
+                if date_review["status"] == "accepted":
+                    fields[matching] = date_review["value"]
+        elif response.strip().lower() not in ("yes", "no", "okay", "ok"):
+            if matching == "amount":
+                detected = AMOUNT_PATTERN.search(response)
+                fields[matching] = "₹" + detected.group(1) if detected else response if response.strip().lower() in ("not applicable", "n/a") else ""
+            elif matching == "counterparty":
+                fields[matching] = response if len(response.split()) <= 12 else ""
+            elif matching in ("location", "desired_resolution", "user_role", "evidence", "key_event"):
+                fields[matching] = response
     fields.update(overrides)
     # Empty default frontend fields must not convert user-reported facts into
     # user-confirmed edits. Only nonempty explicitly supplied values count.
@@ -475,7 +508,9 @@ def build_case(
         # Ask about the actual disputed event instead of silently equating
         # an earlier purchase, payment or failure date with its date.
         description = DATE_RE.sub("", _value(central_event, 160)).strip(" ,.;:")
-        question = (EVENT_DATE_FOLLOWUP_PREFIX + description
+        question = (date_clarification_question(description, date_review)
+                    if date_review and date_review["status"] != "accepted"
+                    else EVENT_DATE_FOLLOWUP_PREFIX + description
                     + "? If you do not know, say 'not known'.")
     # Additional issue-specific questions start only when the core intake is
     # answered (an explicitly unknown fact is an acknowledged answer).
@@ -514,6 +549,7 @@ def build_case(
         "evidence": evidence,
         "context": context,
         "unknown_fields": unknown_fields,
+        "date_clarification": date_review if date_review and date_review["status"] != "accepted" else None,
         "structured_summary": compiled_summary,
         "issues": issues,
         "missing": missing,

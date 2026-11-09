@@ -19,7 +19,7 @@ function LabelValue({label,children}) {
 export default function CaseFilePanel({
   mode, file, profile, onProfile, corrections, onCorrection,
   timelineEdits, onTimeline, evidenceEdits, onEvidence,
-  story, onStory, reviewed, onReviewed, resolvedIssues, onResolve,
+  story, onStory, contextCorrections, onContext, reviewed, onReviewed, resolvedIssues, onResolve,
   onRefresh, onExport, exportBusy, saving, error,
 }) {
   if (!file) return <div className="empty-overview"><h3>Build your case first</h3><p>Describe your civil dispute in the chat. Your case file will appear here.</p></div>;
@@ -34,7 +34,7 @@ export default function CaseFilePanel({
   if (mode==='timeline') return <section className="case-builder">
     <div className="case-heading"><h2>Case timeline</h2><p>Events are user-reported. Dates without a reliable calendar value are not guessed or assigned to the wrong event.</p></div>
     {timeline.length ? timeline.map((event,i) => <div className="case-edit-card" key={event.id || i}>
-      <div className="case-edit-top"><strong>Event {i+1}</strong><span>{event.status === 'ai_suggested' ? 'AI suggested — review' : event.status === 'user_edited' ? 'User edited' : 'User reported'}</span></div>
+      <div className="case-edit-top"><strong>{event.event_kind === "ongoing_status" ? "Ongoing status" : "Event"} {i+1}</strong><span>{event.status === 'ai_suggested' ? 'AI suggested — review' : event.status === 'user_edited' ? 'User edited' : 'User reported'}</span></div>
       <label>Date <input value={event.date || ''} placeholder="Exact date, relative date, or unknown" maxLength={80} onChange={e=>editTimeline(i,'date',e.target.value)}/></label>
       <label>What happened? <textarea value={event.event || ''} maxLength={500} rows={3} onChange={e=>editTimeline(i,'event',e.target.value)}/></label>
       <div className="case-edit-bottom"><small>{Number.isInteger(event.source_message) ? 'Conversation entry '+(event.source_message+1) : 'Added manually or suggested — not verified'}</small><button type="button" onClick={()=>onTimeline(timeline.filter((_,j)=>j!==i))}><Trash2 size={14}/> Remove</button></div>
@@ -85,13 +85,31 @@ export default function CaseFilePanel({
       ].map(([key,label])=><label key={key}>{label}<input maxLength={250} value={profile[key] || ''} placeholder={file.facts[key]?.value || 'Not supplied'} onChange={e=>onProfile(key,e.target.value)}/><small>Current case value: {file.facts[key]?.value || 'Not supplied'}</small></label>)}
     </div>
     <div className="case-edit-card">
+      <h3>Additional case-specific questions</h3>
+      <p>These prompts adapt to the dispute type. “Not known” is valid; do not guess. You can also answer in the chat.</p>
+      {(file.context?.questions || []).length ? file.context.questions.map(item=><label key={item.id}>
+        {item.label}<small>{item.question}</small>
+        <textarea rows={2} maxLength={500} value={contextCorrections[item.id] ?? item.answer ?? ''}
+          placeholder="Your answer, or 'Not known'"
+          onChange={e=>onContext(item.id,e.target.value)}/>
+      </label>) : <p className="case-muted">No additional questions for this case type yet.</p>}
+    </div>
+    <div className="case-edit-card">
+      <h3>Compiled case facts (reported, not verified)</h3>
+      <dl className="facts-list">{(file.structured_summary?.items || []).map(item=><div key={item.key}>
+        <dt>{item.label}</dt><dd>{item.value}</dd>
+      </div>)}</dl>
+      <p className="case-muted">This is assembled from structured fields; it does not change your own narrative or verify documents.</p>
+    </div>
+    <div className="case-edit-card">
       <h3>Editable factual summary</h3>
       <p>Only user-confirmed text should be included in final documents. AI-generated wording is a suggestion, not an established fact.</p>
       <textarea rows={7} maxLength={1400} value={story} onChange={e=>onStory(e.target.value)} placeholder="Describe the dispute in your own words."/>
     </div>
     <div className="case-edit-card">
       <h3>Possible inconsistencies & missing information</h3>
-      {file.missing.length > 0 && <p className="case-muted">Not yet supplied: {file.missing.map(m=>m.label).join(', ')}</p>}
+      {file.missing.length > 0 && <p className="case-muted">Basic information not yet supplied: {file.missing.map(m=>m.label).join(', ')}</p>}
+      {(file.context?.questions || []).some(q=>q.status === 'missing') && <p className="case-muted">Further dispute-specific details to clarify: {file.context.questions.filter(q=>q.status==='missing').map(q=>q.label).join(', ')}. These do not change the basic 8-field score.</p>}
       {file.issues.length===0 && <p className="case-muted">No obvious amount/date discrepancy detected by this limited check. Other inconsistencies may still exist.</p>}
       {file.issues.map(issue=><div className="case-issue" key={issue.id}>
         <AlertTriangle size={16}/><div><strong>{issue.type==='possible_conflict'?'Potential inconsistency':'Needs clarification'}</strong><p>{issue.message}</p><small>Values: {issue.examples.join(' | ')}</small>

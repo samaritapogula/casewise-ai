@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createContinuousSpeech } from './continuousSpeech';
 import {
   ArrowRight, BookOpen, CheckCircle2, ChevronRight, CircleHelp, ClipboardList,
   Download, ExternalLink, FileDown, FileText, Info, Landmark, LoaderCircle,
@@ -60,6 +61,7 @@ export default function App() {
   const [transcriptDraft, setTranscriptDraft] = useState('');
   const [transcriptInterim, setTranscriptInterim] = useState('');
   const [voiceError, setVoiceError] = useState('');
+  const [speechStatus, setSpeechStatus] = useState('');
   const speechRef = useRef(null);
   const [documentType, setDocumentType] = useState('request');
   const [argument, setArgument] = useState('');
@@ -88,7 +90,7 @@ export default function App() {
     fetch(`${API_BASE}/api/health`).then(r => r.ok ? r.json() : Promise.reject()).then(setApiStatus).catch(() => setApiStatus({ status: 'offline' }));
   }, []);
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [messages, busy]);
-  useEffect(() => () => { speechRef.current?.abort(); }, []);
+  useEffect(() => () => { speechRef.current?.cancel(); }, []);
 
   async function callAnalyze(next, addReply = true, formProfile = profile, formCategory = category) {
     setBusy(true); setError('');
@@ -107,10 +109,11 @@ export default function App() {
 
   function changeLanguage(nextLanguage) {
     // A recording uses the language that was selected when it started.
-    speechRef.current?.abort();
+    speechRef.current?.cancel();
     speechRef.current = null;
     setListening(false);
     setTranscriptInterim('');
+    setSpeechStatus('');
     setLanguage(nextLanguage);
     if (!sentMessages.length) setMessages([{ role: 'assistant', content: welcomeMessages[nextLanguage] || welcomeMessages.en }]);
     setVoiceError('');
@@ -121,53 +124,27 @@ export default function App() {
     if (busy) return;
     const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Recognition) {
-      setVoiceError('This browser does not support speech recognition. Use typed input or try a browser with Web Speech support.');
+      setVoiceError('This browser does not support speech recognition. Use typed input or try Chrome.');
       setTranscriptOpen(true);
       return;
     }
-    try {
-      speechRef.current?.abort();
-      const recognition = new Recognition();
-      recognition.lang = languages.find(item => item.value === language)?.speech || 'en-IN';
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.maxAlternatives = 1;
-      recognition.onresult = event => {
-        let finalText = '';
-        let interimText = '';
-        for (let i = 0; i < event.results.length; i += 1) {
-          const result = event.results[i];
-          if (result.isFinal) finalText += (result[0]?.transcript || '') + ' ';
-          else interimText += (result[0]?.transcript || '') + ' ';
-        }
-        if (finalText.trim()) setTranscriptDraft(finalText.trim().slice(0, 2000));
-        setTranscriptInterim(interimText.trim());
-      };
-      recognition.onerror = event => {
-        if (event.error !== 'aborted') {
-          const errors = {
-            'not-allowed': 'Microphone access was denied. Allow microphone access in browser settings, or type instead.',
-            'service-not-allowed': 'The speech recognition service is blocked by your browser. Try typing instead.',
-            'language-not-supported': 'Speech recognition for this language is unavailable in your browser. Try typing instead.',
-            'no-speech': 'No speech was detected. You can try recording again.',
-            'network': 'Speech recognition could not reach its service. Check your connection or type instead.',
-          };
-          setVoiceError(errors[event.error] || 'Speech recognition failed. You can type instead.');
-        }
-        setListening(false);
-      };
-      recognition.onend = () => { setListening(false); setTranscriptInterim(''); speechRef.current = null; };
-      setTranscriptDraft('');
-      setTranscriptInterim('');
-      setVoiceError('');
-      setTranscriptOpen(true);
-      speechRef.current = recognition;
-      recognition.start();
-      setListening(true);
-    } catch {
-      setListening(false);
-      setVoiceError('Microphone could not start. Check microphone permissions or type instead.');
-    }
+    speechRef.current?.cancel();
+    setTranscriptDraft('');
+    setTranscriptInterim('');
+    setSpeechStatus('');
+    setVoiceError('');
+    setTranscriptOpen(true);
+    const controller = createContinuousSpeech({
+      Recognition,
+      lang: languages.find(item => item.value === language)?.speech || 'en-IN',
+      onTranscript: setTranscriptDraft,
+      onInterim: setTranscriptInterim,
+      onListening: setListening,
+      onError: setVoiceError,
+      onStatus: setSpeechStatus,
+    });
+    speechRef.current = controller;
+    controller.start();
   }
 
   function useTranscription() {
@@ -187,9 +164,10 @@ export default function App() {
   }
 
   function discardTranscription() {
-    speechRef.current?.abort();
+    speechRef.current?.cancel();
     speechRef.current = null;
     setListening(false);
+    setSpeechStatus('');
     setTranscriptOpen(false);
     setTranscriptDraft('');
     setTranscriptInterim('');
@@ -288,14 +266,14 @@ export default function App() {
             <div ref={bottom}/>
           </div>
           {transcriptOpen && <section className="transcript-review" aria-label="Review voice transcription">
-            <div className="transcript-title"><Mic size={16}/><strong>Review voice transcription</strong><span>{listening ? 'Listening…' : 'Not recording'}</span></div>
-            <label htmlFor="casewise-transcription">Speech is transcribed in {languages.find(l => l.value === language)?.label}. Correct any errors before adding it to your message.</label>
-            <textarea id="casewise-transcription" rows={3} maxLength={2000} value={transcriptDraft} onChange={e => setTranscriptDraft(e.target.value)} placeholder={listening ? 'Speak now…' : 'Speech will appear here if recognized.'} />
+            <div className="transcript-title"><Mic size={16}/><strong>Review voice transcription</strong><span>{listening ? (speechStatus || 'Listening…') : 'Not recording'}</span></div>
+            <label htmlFor="casewise-transcription">Speech is transcribed in {languages.find(l => l.value === language)?.label}. Short pauses are fine; press the microphone button again to stop. Then correct any errors before adding the transcription.</label>
+            <textarea id="casewise-transcription" rows={3} maxLength={2000} value={transcriptDraft} readOnly={listening} onChange={e => setTranscriptDraft(e.target.value)} placeholder={listening ? 'Speak now — pauses will not submit your recording…' : 'Speech will appear here if recognized.'} />
             {transcriptInterim && <p className="interim-text" aria-live="polite">Hearing: {transcriptInterim}</p>}
             {voiceError && <p className="voice-alert" role="alert">{voiceError}</p>}
             <div className="transcript-actions"><button type="button" onClick={discardTranscription}>Discard</button><button type="button" onClick={useTranscription} disabled={listening || !transcriptDraft.trim()}>Add to message for review</button></div>
           </section>}
-          <form className="composer" onSubmit={onSend}><textarea ref={textarea} value={input} rows={2} maxLength={2000} placeholder="Describe what happened, when, and what outcome you want..." onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }}/><div className="composer-footer"><span><Info size={13}/> Audio may be processed by your browser's speech provider. Transcript is never sent until you press Send.</span><div className="composer-actions"><button type="button" disabled={busy} aria-label={listening ? 'Stop microphone' : 'Start voice input'} aria-pressed={listening} title={listening ? 'Stop listening' : 'Speak in selected language'} onClick={toggleVoice} className={`voice-button ${listening ? 'recording' : ''}`}>{listening ? <MicOff size={16}/> : <Mic size={16}/>}</button><button type="submit" disabled={!input.trim() || busy || listening} className="send-button">Send <Send size={15}/></button></div></div></form>
+          <form className="composer" onSubmit={onSend}><textarea ref={textarea} value={input} rows={2} maxLength={2000} placeholder="Describe what happened, when, and what outcome you want..." onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } }}/><div className="composer-footer"><span><Info size={13}/> Audio may be processed by your browser's speech provider. Transcript is never sent until you press Send.</span><div className="composer-actions"><button type="button" disabled={busy} aria-label={listening ? 'Stop microphone' : 'Start voice input'} aria-pressed={listening} title={listening ? 'Stop recording and review transcription' : 'Start continuous dictation in selected language'} onClick={toggleVoice} className={`voice-button ${listening ? 'recording' : ''}`}>{listening ? <MicOff size={16}/> : <Mic size={16}/>}</button><button type="submit" disabled={!input.trim() || busy || listening} className="send-button">Send <Send size={15}/></button></div></div></form>
         </div>
         <div className="footnote"><ShieldAlert size={15}/> CaseWise AI is a demonstration tool, not a lawyer. Check all advice and legal deadlines with a professional.</div>
       </section>

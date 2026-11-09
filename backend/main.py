@@ -232,8 +232,8 @@ def make_pdf(request: Request):
             story.append(Spacer(1, 7))
         else:
             # Only escaped user input is ever passed to ReportLab markup.
-            chosen_style = header if index == 0 else caption if index == 1 or line.startswith("REVIEW BEFORE") else subject if line.startswith("Subject:") or line == "Requested resolution:" else normal
+            chosen_style = header if index == 0 else caption if index == 1 or line.startswith("REVIEW BEFORE") else subject if line.startswith("Subject:") or line.rstrip().endswith(":") or line.startswith("PURPOSE - ") else normal
             story.append(Paragraph(escape(line.replace("₹", "INR ")).replace("\n", " "), chosen_style))
     doc.build(story)
     result.seek(0)
-    return StreamingResponse(result, media_type="application/pdf", headers={"Content-Disposition": 'attachment; filename="casewise-draft-request.pdf"', "Cache-Control": "no-store"})
+    return StreamingResponse(result, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="casewise-{request.document_type}-draft.pdf"', "Cache-Control": "no-store"})

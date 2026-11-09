@@ -50,3 +50,52 @@
 /* Keep the manual stop action visible while dictation auto-reconnects after pauses. */
 .transcript-actions .recording-stop{display:inline-flex;align-items:center;gap:6px;border-color:#d6a6a2;background:#fff1ef;color:#a33d32}
 .transcript-review textarea[readonly]{background:#f8fbfb}
+
+
+/* Phase 2 — reviewed case file, timeline, evidence and export */
+.right-tabs{gap:15px;overflow-x:auto;scrollbar-width:thin;white-space:nowrap;padding:0 18px}
+.right-tabs button{flex-shrink:0;font-size:11px}
+.case-builder{display:flex;flex-direction:column;gap:16px;padding-bottom:18px}
+.case-heading h2{font-size:17px;color:#193a4a;margin:0 0 6px}
+.case-heading p,.case-edit-card p,.case-muted{font-size:11px;line-height:1.65;color:#718693;margin:0}
+.case-completeness,.case-brief{background:#f2f8f6;border:1px solid #dcebe8;border-radius:12px;padding:14px}
+.case-brief{margin:0 0 20px}
+.case-meter-top{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:11px;color:#254959}
+.case-meter-top span{font-size:10px;font-weight:700;color:#4a8172}
+.case-meter{height:9px;border-radius:30px;background:#dbe6e3;overflow:hidden;margin:10px 0}
+.case-meter>span{height:100%;background:#4e9b82;display:block;transition:width .2s}
+.case-completeness p,.case-brief p{font-size:10px;line-height:1.5;color:#648077}
+.case-checklist{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px}
+.case-checklist>div{font-size:10px;color:#81949a;display:flex;align-items:center;gap:6px}
+.case-checklist>div.complete{color:#247256}
+.case-unchecked{height:14px;width:14px;display:inline-block;border:1px solid #b2c1c1;border-radius:50%}
+.case-brief-links{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.case-brief-links button{background:white;border:1px solid #cfe0da;color:#376963;padding:8px 10px;border-radius:7px;font-size:10px;font-weight:800}
+.case-edit-card{border:1px solid #e0e7e9;background:white;border-radius:11px;padding:15px;display:flex;flex-direction:column;gap:12px}
+.case-edit-card h3{font-size:13px;color:#244556;margin:0}
+.case-edit-card label{font-size:10px;font-weight:700;color:#506976;display:flex;flex-direction:column;gap:6px}
+.case-edit-card input,.case-edit-card textarea,.case-edit-card select{font:inherit;font-size:12px;color:#244452;border:1px solid #d7e4e6;background:#fff;border-radius:7px;padding:10px;width:100%;outline:0}
+.case-edit-card input:focus,.case-edit-card textarea:focus,.case-edit-card select:focus{border-color:#428c84;box-shadow:0 0 0 2px #e7f5f1}
+.case-edit-card textarea{resize:vertical;line-height:1.55}
+.case-edit-card small{font-size:9px;font-weight:500;color:#96a5aa}
+.case-edit-top,.case-edit-bottom{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.case-edit-top strong{font-size:12px;color:#26475a}
+.case-edit-top span{color:#7a8c92;font-size:9px}
+.case-edit-bottom button{display:flex;align-items:center;gap:4px;border:0;background:transparent;color:#a55b57;font-size:10px}
+.case-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.case-actions button,.case-builder>.case-secondary{border:none;border-radius:8px;background:#153d51;color:white;padding:11px 13px;display:inline-flex;align-items:center;justify-content:center;gap:7px;font-size:11px;font-weight:700}
+.case-actions .case-secondary,.case-builder>.case-secondary{background:#e7f1ee;color:#28726a}
+.case-actions button:disabled{opacity:.55;cursor:not-allowed}
+.casefield{display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#56717a}
+.casefield strong{color:#2e5567}
+.case-issue{display:flex;align-items:start;gap:9px;background:#fff8eb;border:1px solid #f3dfbe;border-radius:8px;padding:10px;color:#9c7638}
+.case-issue>svg{flex:none}
+.case-issue strong{font-size:11px}
+.case-issue p{margin:4px 0;font-size:10px;color:#9c7638}
+.case-issue .case-check{flex-direction:row;align-items:center;font-size:10px;margin-top:8px}
+.case-issue .case-check input{height:14px;width:14px}
+.case-confirm{padding:14px;border:1px solid #d7e9e3;background:#f1f7f4;border-radius:10px}
+.case-confirm label{display:flex;align-items:flex-start;gap:9px;font-size:11px;line-height:1.6;color:#385f58}
+.case-confirm input{flex:none;margin-top:3px}
+.case-builder>.case-muted{display:flex;align-items:center;gap:6px}
+@media(max-width:620px){.case-checklist{grid-template-columns:1fr 1fr}.right-tabs{padding:0 12px;gap:12px}}

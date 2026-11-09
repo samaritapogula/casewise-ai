@@ -74,6 +74,7 @@ export default function App() {
   const bottom = useRef(null);
   const textarea = useRef(null);
   const [caseCorrections, setCaseCorrections] = useState({});
+  const [contextCorrections, setContextCorrections] = useState({});
   const [caseTimelineEdits, setCaseTimelineEdits] = useState(null);
   const [caseEvidenceEdits, setCaseEvidenceEdits] = useState(null);
   const [caseStory, setCaseStory] = useState('');
@@ -98,6 +99,7 @@ export default function App() {
       category,
       case_id: caseId.current,
       case_overrides: caseCorrections,
+      context_overrides: contextCorrections,
       timeline_edits: caseTimelineEdits,
       evidence_edits: caseEvidenceEdits,
       asked_fields: askedFields,
@@ -310,7 +312,7 @@ export default function App() {
     setMessages(initialMessages); setInput(''); setAnalysis(null); setProfile(emptyProfile);
     setCategory('auto'); setError(''); setTab('summary'); setReviewOpen(false); setDraftConfirmed(false);
     discardTranscription(); setMessages(initialMessages); setArgument(''); setPracticeResult(null); setDocumentType('request');
-    setCaseCorrections({}); setCaseTimelineEdits(null); setCaseEvidenceEdits(null);
+    setCaseCorrections({}); setContextCorrections({}); setCaseTimelineEdits(null); setCaseEvidenceEdits(null);
     setCaseStory(''); setStoryTouched(false); setCaseReviewed(false);
     setAskedFields([]); setResolvedIssues([]); setCaseError('');
     setCompletedActions({}); setPlanReviewed(false); setPlanError('');
@@ -428,16 +430,25 @@ export default function App() {
                </div>}
                <div className="section-block"><h2>Structured case narrative</h2>
                  <p className="issue-text">{analysis.case_file?.narrative?.text || analysis.summary.draft_facts}</p>
+                  {!!analysis.case_file?.structured_summary?.items?.length && <div className="reported-ledger">
+                    <strong>Compiled reported facts</strong>
+                    <dl className="facts-list">{analysis.case_file.structured_summary.items.map(item=><div key={item.key}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>
+                    <small>Reported facts only. Evidence is not independently verified.</small>
+                  </div>
                  <p className="source-caveat">Proposed from user statements and/or AI suggestions. Check the dates, evidence and allegations before using it.</p>
                  <h3 className="micro-heading">Where you may stand</h3>
-                 <p className="issue-text">{analysis.summary.ai_extracted_case?.position_suggestion || 'Possible options depend on the facts and local rules. Review the official resources below; this is not a legal merits prediction.'}</p>
+                 <p className="issue-text">{analysis.legal_plan?.position?.explanation || 'Possible options depend on the facts and local rules. Review the official resources below; this is not a legal merits prediction.'}</p>
                </div>
                {Object.keys(analysis.summary.facts_reported).length > 0 && <div className="section-block"><h2>Facts captured</h2><dl className="facts-list">{Object.entries(analysis.summary.facts_reported).map(([k,v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl></div>}
-              <div className="section-block"><div className="section-header"><h2>Suggested next steps</h2><button className="inline-button" onClick={() => setTab('plan')}>Open action plan <ChevronRight size={13}/></button></div><ol className="steps-list">{analysis.next_steps.map((v,i) => <li key={i}><span className="step-number">{i+1}</span><span>{v}</span></li>)}</ol></div>
-              <div className="section-block"><div className="section-header"><h2>Information still needed</h2><button className="inline-button" onClick={() => setTab('details')}>Add details <ChevronRight size={13}/></button></div>{analysis.case_file?.missing?.length ? <div className="missing-tags">{analysis.case_file.missing.map(v => <span key={v.key}>{v.label}</span>)}</div> : <p className="small-success"><CheckCircle2 size={15}/> Case-builder checklist complete. Facts and law still need checking.</p>}</div>
+              <div className="section-block"><div className="section-header"><h2>Suggested next steps</h2><button className="inline-button" onClick={() => setTab('plan')}>Open action plan <ChevronRight size={13}/></button></div>{analysis.legal_plan?.stage && <p className="case-muted">Current guidance stage: <strong>{analysis.legal_plan.stage.title}</strong></p>}
+                <ol className="steps-list">{(analysis.legal_plan?.actions || []).slice(0,4).map((task,i) => <li key={task.id}><span className="step-number">{i+1}</span><span><strong>{task.title}</strong> — {task.instructions}</span></li>)}</ol></div>
+              <div className="section-block"><div className="section-header"><h2>Information still needed</h2><button className="inline-button" onClick={() => setTab('review')}>Review facts <ChevronRight size={13}/></button></div>
+                {analysis.case_file?.missing?.length ? <div className="missing-tags">{analysis.case_file.missing.map(v => <span key={v.key}>{v.label}</span>)}</div> : <p className="small-success"><CheckCircle2 size={15}/> Eight basic information fields addressed. Facts and law still need review.</p>}
+                {!!analysis.legal_plan?.context_questions?.filter(q=>q.status==='missing').length && <p className="case-muted">Additional questions: {analysis.legal_plan.context_questions.filter(q=>q.status==='missing').map(q=>q.label).join(', ')}.</p>}
+              </div>
               <div className="section-block"><h2>Official starting points</h2><div className="source-list">{analysis.sources.map(src => <a key={src.id} href={src.url} target="_blank" rel="noopener noreferrer"><span className="source-icon"><Landmark size={16}/></span><span><strong>{src.title}</strong><small>{src.description}</small></span><ExternalLink size={14}/></a>)}</div><p className="source-caveat">{analysis.source_status}</p></div>
               <div className="safety-card"><ShieldAlert size={17}/><div><strong>Know the limits</strong>{analysis.safety_flags.map((flag,i) => <p key={i}>{flag}</p>)}</div></div>
-              <DocumentChooser onChoose={openDraftReview} disabled={downloading || analysis.needs_lawyer || busy}/>
+              <DocumentChooser onChoose={openDraftReview} disabled={downloading || analysis.needs_lawyer || busy} recommendations={analysis.legal_plan?.document_recommendations}/>
               <div className="practice-card"><h2><MessageSquareText size={16}/> Practise your argument</h2><p>Try explaining your side. CaseWise AI will ask a respectful opposing-side question and suggest improvements. Not a prediction.</p><textarea maxLength={1600} rows={3} value={argument} onChange={e => setArgument(e.target.value)} placeholder="My position is... The evidence is..."/><button onClick={practice} disabled={!sentMessages.length || analysis.needs_lawyer || argument.trim().length < 10 || practicing}>{practicing ? 'Thinking...' : 'Practise with AI'}</button>{practiceResult && <div className="practice-result"><strong>Other side might ask</strong><p>{practiceResult.opponent_question}</p><strong>How to improve your argument</strong><p>{practiceResult.feedback}</p><small>{practiceResult.mode === 'guided-demo' ? 'Offline demo feedback' : 'Gemini-assisted practice; verify details'}</small></div>}</div>
             </>}
           </> : tab === 'plan' ? <LegalPlanPanel plan={analysis?.legal_plan}
@@ -448,6 +459,7 @@ export default function App() {
     onChooseDocument={openDraftReview} documentsDisabled={downloading || analysis?.needs_lawyer || busy}
   /> : tab === 'details' ? <div className="details-tab"><div className="panel-topline">OPTIONAL FACT CHECK</div><h2>Complete your case details</h2><p>Add only details you're comfortable sharing. These fields are used to create a clearer summary and draft letter.</p><div className="profile-fields">{fieldConfig.map(([key,label,hint]) => <label key={key}>{label}<input value={profile[key]} maxLength={250} placeholder={hint} onChange={e => {markCaseChanged();setProfile(p => ({ ...p, [key]: e.target.value }));}}/></label>)}</div><button className="update-button" disabled={!sentMessages.length || busy} onClick={async () => { await callAnalyze(messages, false); setTab('summary'); }}>Update case overview <ArrowRight size={16}/></button><p className="privacy-note"><ShieldCheck size={15}/> Case text is not intentionally saved on the server. If Gemini is configured, conversational inputs are sent to its API.</p></div> : <CaseFilePanel mode={tab} file={analysis?.case_file}
     profile={profile} onProfile={(key,value)=>{markCaseChanged();setProfile(p=>({...p,[key]:value}));}}
+    contextCorrections={contextCorrections} onContext={(key,value)=>{markCaseChanged();setContextCorrections(p=>({...p,[key]:value}));}}
     corrections={caseCorrections} onCorrection={(key,value)=>{markCaseChanged();setCaseCorrections(p=>({...p,[key]:value}));}}
     timelineEdits={caseTimelineEdits} onTimeline={next=>{markCaseChanged();setCaseTimelineEdits(next);}}
     evidenceEdits={caseEvidenceEdits} onEvidence={next=>{markCaseChanged();setCaseEvidenceEdits(next);}}

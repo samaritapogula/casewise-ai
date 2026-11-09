@@ -6,6 +6,7 @@ engine. Policy records are guidance templates, never legal determinations.
 from __future__ import annotations
 
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -47,3 +48,23 @@ def get_case_policy(category: str, subtype: str = "") -> dict:
     combined["category"] = category
     combined["subtype"] = subtype
     return combined
+
+
+
+def get_regional_source_ids(category: str, reported_location: str) -> list[str]:
+    """Only include source IDs supported by an explicitly named state.
+
+    A city name alone is insufficient to infer state law. Registry additions
+    can cover more jurisdictions without changing the planning algorithm.
+    """
+    place = " ".join(str(reported_location or "").casefold().split())
+    found = []
+    for entry in _registry().get("regional_sources", []):
+        if entry.get("category") != category:
+            continue
+        state = str(entry.get("state") or "").casefold().strip()
+        if state and re.search(r"(?<!\w)" + re.escape(state) + r"(?!\w)", place):
+            for source_id in entry.get("source_ids", []):
+                if isinstance(source_id, str) and source_id not in found:
+                    found.append(source_id)
+    return found

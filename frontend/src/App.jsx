@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createContinuousSpeech } from './continuousSpeech';
+import CaseFilePanel from './CaseFilePanel';
 import {
   ArrowRight, BookOpen, CheckCircle2, ChevronRight, CircleHelp, ClipboardList,
   Download, ExternalLink, FileDown, FileText, Info, Landmark, LoaderCircle,
@@ -68,7 +69,82 @@ export default function App() {
   const [reviewError, setReviewError] = useState('');
   const bottom = useRef(null);
   const textarea = useRef(null);
+  const [caseCorrections, setCaseCorrections] = useState({});
+  const [caseTimelineEdits, setCaseTimelineEdits] = useState(null);
+  const [caseEvidenceEdits, setCaseEvidenceEdits] = useState(null);
+  const [caseStory, setCaseStory] = useState('');
+  const [storyTouched, setStoryTouched] = useState(false);
+  const [caseReviewed, setCaseReviewed] = useState(false);
+  const [askedFields, setAskedFields] = useState([]);
+  const [resolvedIssues, setResolvedIssues] = useState([]);
+  const [caseExportBusy, setCaseExportBusy] = useState(false);
+  const [caseError, setCaseError] = useState('');
+  const caseId = useRef('CW-' + Math.random().toString(36).slice(2, 11).toUpperCase());
   const sentMessages = messages.filter(m => m.role === 'user');
+
+  function casePayload(nextMessages = messages, other = {}) {
+    return {
+      messages: nextMessages,
+      profile,
+      category,
+      case_id: caseId.current,
+      case_overrides: caseCorrections,
+      timeline_edits: caseTimelineEdits,
+      evidence_edits: caseEvidenceEdits,
+      asked_fields: askedFields,
+      resolved_issues: resolvedIssues,
+      story_override: storyTouched ? caseStory : '',
+      reviewed: caseReviewed,
+      ai_suggestion: analysis?.summary?.ai_extracted_case || null,
+      ...other,
+    };
+  }
+
+  function markCaseChanged() {
+    setCaseReviewed(false);
+    setCaseError('');
+  }
+
+  async function saveCaseEdits() {
+    if (!sentMessages.length || busy) return;
+    setBusy(true);
+    setCaseError('');
+    try {
+      const result = await fetch(API_BASE + '/api/case-file', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(casePayload()),
+      });
+      const data = await result.json();
+      if (!result.ok) throw new Error(data.detail || 'Could not update the case file.');
+      setAnalysis(current => current ? {...current, case_file:data} : current);
+    } catch (err) { setCaseError(err.message || 'Could not update the case file.'); }
+    finally { setBusy(false); }
+  }
+
+  async function exportCase(format) {
+    if (!sentMessages.length || !caseReviewed || !caseStory.trim() || caseExportBusy) return;
+    setCaseExportBusy(true);
+    setCaseError('');
+    try {
+      const res = await fetch(API_BASE + '/api/case-export', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(casePayload(messages, {story_override:caseStory, reviewed:true, export_format:format})),
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.detail || 'Could not export the case file.');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'CaseWise-Case-File.' + format;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch (err) { setCaseError(err.message || 'Could not export the case file.'); }
+    finally { setCaseExportBusy(false); }
+  }
+
 
   useEffect(() => {
     fetch(`${API_BASE}/api/health`).then(r => r.ok ? r.json() : Promise.reject()).then(setApiStatus).catch(() => setApiStatus({ status: 'offline' }));
@@ -81,12 +157,17 @@ export default function App() {
     try {
       const response = await fetch(`${API_BASE}/api/analyze`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: next, category: formCategory, profile: formProfile }),
+        body: JSON.stringify(casePayload(next, { category:formCategory, profile:formProfile, reviewed:false })),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Analysis request failed.');
       setAnalysis(data);
-      if (addReply) setMessages([...next, { role: 'assistant', content: data.assistant_message }]);
+      if (!storyTouched) setCaseStory(data.case_file?.narrative?.text || '');
+      if (addReply) {
+        setMessages([...next, { role: 'assistant', content: data.assistant_message }]);
+        const asked = data.case_file?.next_question?.field;
+        if (asked) setAskedFields(fields => fields.includes(asked) ? fields : [...fields, asked]);
+      }
     } catch (e) { setError(e.message || 'Could not connect to the backend.'); }
     finally { setBusy(false); }
   }
@@ -161,6 +242,7 @@ export default function App() {
     const value = input.trim();
     if (!value || busy) return;
     const next = [...messages, { role: 'user', content: value }];
+    setCaseReviewed(false);
     setMessages(next);
     setInput('');
     callAnalyze(next);
@@ -173,6 +255,10 @@ export default function App() {
     setMessages(initialMessages); setInput(''); setAnalysis(null); setProfile(emptyProfile);
     setCategory('auto'); setError(''); setTab('summary'); setReviewOpen(false); setDraftConfirmed(false);
     discardTranscription(); setMessages(initialMessages); setArgument(''); setPracticeResult(null); setDocumentType('request');
+    setCaseCorrections({}); setCaseTimelineEdits(null); setCaseEvidenceEdits(null);
+    setCaseStory(''); setStoryTouched(false); setCaseReviewed(false);
+    setAskedFields([]); setResolvedIssues([]); setCaseError('');
+    caseId.current = 'CW-' + Math.random().toString(36).slice(2, 11).toUpperCase();
   }
   function openDraftReview() {
     if (!analysis || analysis.needs_lawyer || busy) return;

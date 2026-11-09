@@ -1,0 +1,16 @@
+# One public service: FastAPI endpoints + compiled React frontend.
+# Connect the GitHub repository in Render -> New -> Blueprint.
+services:
+  - type: web
+    name: casewise-ai
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+# Optional: Set GEMINI_API_KEY privately in the Render service Environment.
+# Never put secrets here or in VITE_* variables.

@@ -434,7 +434,7 @@ export default function App() {
                     <strong>Compiled reported facts</strong>
                     <dl className="facts-list">{analysis.case_file.structured_summary.items.map(item=><div key={item.key}><dt>{item.label}</dt><dd>{item.value}</dd></div>)}</dl>
                     <small>Reported facts only. Evidence is not independently verified.</small>
-                  </div>
+                  </div>}
                  <p className="source-caveat">Proposed from user statements and/or AI suggestions. Check the dates, evidence and allegations before using it.</p>
                  <h3 className="micro-heading">Where you may stand</h3>
                  <p className="issue-text">{analysis.legal_plan?.position?.explanation || 'Possible options depend on the facts and local rules. Review the official resources below; this is not a legal merits prediction.'}</p>

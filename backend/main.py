@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+import json
 from typing import Any
 import os
 from xml.sax.saxutils import escape
@@ -185,6 +186,31 @@ def rehearse(request: PracticeRequest):
         return practice_argument(data, request.argument)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/draft-preview")
+def preview_draft(request: Request):
+    """Preview the same reviewed draft text that the PDF generator will use.
+
+    Acknowledgement is required just as for exporting a PDF. This preview
+    remains informational and does not send or file any communication.
+    """
+    try:
+        draft_text = make_draft(
+            as_dict(request), request.profile, request.category,
+            confirmed=request.confirmed, document_type=request.document_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return Response(
+        content=json.dumps({
+            "document_type": request.document_type,
+            "draft": draft_text,
+            "disclaimer": "Editable, user-reviewed text only. Never an automatic filing or legal opinion.",
+        }),
+        media_type="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.post("/api/draft")

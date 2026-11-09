@@ -21,7 +21,8 @@ export default function Phase4Guidance({ guidance, loading, error, onRefresh }) 
         <p className="phase4-disclaimer">Sources refer to statements in this conversation. They do not confirm that any evidence is authentic or legally sufficient.</p>
         {guidance.fact_trace.map(row=><div key={row.key} className="phase4-trace">
           <strong>{row.label}</strong><span>{row.value}</span>
-          <small>{row.status || 'user-reported'} · unverified{row.sources.length ? ' · source recorded' : ' · independently confirm source'}</small>
+          <small>{row.status || 'user-reported'} · unverified</small>
+          {row.sources.length ? row.sources.map((ref,i)=><small key={i} className="phase4-source">Conversation message {Number.isInteger(ref.message_index) ? ref.message_index+1 : '?'}{ref.excerpt ? ': “'+ref.excerpt.slice(0,130)+'”' : ' (reported reference)'}</small>) : <small className="phase4-source">No direct message excerpt recorded; review this assertion.</small>}
         </div>)}
       </details>
     </>}

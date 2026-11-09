@@ -96,6 +96,7 @@ export default function CaseFilePanel({
     </div>
     <div className="case-edit-card">
       <h3>Compiled case facts (reported, not verified)</h3>
+      <p>{file.structured_summary?.narrative}</p>
       <dl className="facts-list">{(file.structured_summary?.items || []).map(item=><div key={item.key}>
         <dt>{item.label}</dt><dd>{item.value}</dd>
       </div>)}</dl>

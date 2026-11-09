@@ -179,3 +179,16 @@
 .review-actions .review-preview{background:#e8f3ef;color:#20695f}
 .review-actions .review-download{background:#153e51;color:white}
 @media(max-width:620px){.review-actions{flex-wrap:wrap}.review-actions button{flex:1;justify-content:center;white-space:normal}}
+
+
+/* Case-aware guidance stages and reported-fact summaries */
+.plan-stage{border:1px solid #d2e4dd;border-radius:10px;background:#f0f7f3;padding:14px}
+.plan-stage strong{font-size:13px;color:#1f594e}
+.plan-stage p{font-size:11px;line-height:1.6;margin:5px 0;color:#456c65}
+.plan-stage small{font-size:9.5px;color:#5c7970}
+.reported-ledger{background:#f7faf9;border:1px solid #e1ece8;border-radius:9px;padding:12px;margin-top:10px}
+.reported-ledger>strong{font-size:11px;color:#254f5e}
+.reported-ledger>small{font-size:9.5px;color:#687e82}
+.document-choice small.document-suggested{color:#206c50;font-weight:650}
+.document-choice small.document-guidance{color:#637f88}
+.case-builder .case-edit-card dl.facts-list{margin:12px 0}

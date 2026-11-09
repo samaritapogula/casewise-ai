@@ -13,9 +13,10 @@ from typing import Any
 
 from .engine import AMOUNT_PATTERN, clean, analyze, draft_narrative
 from .evidence_recognition import extract_evidence
-from .date_intake import reported_date_mentions, assess_event_date_reply, date_clarification_question
+from .date_intake import reported_date_mentions, assess_event_date_reply, date_clarification_question, event_action_labels
 from .case_enrichment import (build_context, explicit_unknown_fields, structured_facts_summary,
                               event_kind, match_primary_question, EVENT_DATE_FOLLOWUP_PREFIX)
+from .case_policy import get_case_policy
 
 FIELD_LABELS = {
     "user_role": "Your role",
@@ -235,13 +236,14 @@ def _timeline(messages: list[dict], ai: dict | None, edits: list[dict] | None) -
     return _sort_events(events)
 
 
-def _narrative_messages(messages: list[dict]) -> list[dict]:
+def _narrative_messages(messages: list[dict], context_questions: set[str] | None = None) -> list[dict]:
     """Exclude short field-only follow-up answers from the general case narrative.
 
     They remain available to the corresponding structured field and source
     provenance, but should not become an awkward new sentence in the story.
     """
     cleaned = []
+    context_prompts = context_questions or set()
     for index, message in enumerate(messages):
         if message.get("role") != "user":
             continue
@@ -252,6 +254,14 @@ def _narrative_messages(messages: list[dict]) -> list[dict]:
             and match_primary_question(prev.get("content"), QUESTIONS) is not None
         )
         field_answer = match_primary_question(prev.get("content"), QUESTIONS) if was_field_answer else None
+        context_field_answer = (
+            prev.get("role") == "assistant"
+            and prev.get("content") in context_prompts
+        )
+        # Short answers to case-specific prompts belong in the associated
+        # structured context field, not appended to the event narrative.
+        if context_field_answer and len(text) < 180 and not EVENT_PATTERN.search(text):
+            continue
         # A short answer to a date question is metadata about an event,
         # not a replacement for the user's factual case narrative.
         if was_field_answer and (
@@ -364,7 +374,9 @@ def build_case(
     base = original["profile_used"]
     overrides = {k: _value(v, 500) for k, v in (case_overrides or {}).items()
                  if k in FIELD_LABELS or k == "subtype"}
-    narrative_messages = _narrative_messages(messages)
+    subtype = _subtype(chosen, text, overrides.get("subtype", ""))
+    context_questions = {item["question"] for item in get_case_policy(chosen, subtype["code"])["detail_questions"]}
+    narrative_messages = _narrative_messages(messages, context_questions)
     # Prefer the actual disputed event to the entire chat story. Evidence,
     # requests for a remedy and party-name answers are separate fields.
     event_segments = _event_segments(messages)
@@ -466,8 +478,40 @@ def build_case(
             "sources": _message_refs(messages, source_phrase) if key not in provided and _present(source_phrase) else [],
         }
 
-    subtype = _subtype(chosen, text, overrides.get("subtype", ""))
     timeline = _timeline(messages, ai, timeline_edits)
+    # A direct answer to "when did this event happen?" can date the
+    # previously reported undated event. Avoid retaining a duplicate dated
+    # paraphrase from that answer, while keeping distinct acts (complaints,
+    # reminders and other events) and original provenance intact.
+    if timeline_edits is None and date_review and date_review["status"] == "accepted":
+        asked_event_dates = [
+            i for i in range(1, len(messages))
+            if messages[i - 1].get("role") == "assistant"
+            and messages[i].get("role") == "user"
+            and match_primary_question(messages[i - 1].get("content"), QUESTIONS) == "event_date"
+        ]
+        anchor_actions = event_action_labels(central_event)
+        target = next(
+            (row for row in timeline
+             if row["event"] == central_event and not _date_sort(row["date"])), None,
+        )
+        if target and anchor_actions:
+            target["date"] = fields["event_date"]
+            target["date_status"] = "explicit"
+            target["date_source_message"] = asked_event_dates[-1] if asked_event_dates else None
+            target["date_source_excerpt"] = (
+                _value(messages[asked_event_dates[-1]].get("content"), 160)
+                if asked_event_dates else ""
+            )
+            timeline = [
+                row for row in timeline
+                if row is target or not (
+                    row["source_message"] in asked_event_dates
+                    and _date_sort(row["date"]) == _date_sort(fields["event_date"])
+                    and bool(anchor_actions & event_action_labels(row["event"]))
+                )
+            ]
+    timeline = _sort_events(timeline)
     evidence = _evidence(messages, evidence_edits)
     context = build_context(chosen, subtype["code"], messages, context_overrides)
     unknown_fields = explicit_unknown_fields(messages, QUESTIONS)
@@ -541,10 +585,14 @@ def build_case(
     if question is None:
         question = "I've noted the available information. Please review the case file and correct any missing or inconsistent details."
 
-    story = _value(story_override, 1400) or _value((ai or {}).get("story_english"), 1400) or _value(draft_narrative(narrative_messages), 1400)
+    # Prefer user statements over LLM rewriting. A short answer to a
+    # category-specific prompt (e.g. "no terms provided") must never become
+    # a spurious sentence in every drafted letter.
+    grounded_story = _value(draft_narrative(narrative_messages), 1400)
+    story = _value(story_override, 1400) or grounded_story or _value((ai or {}).get("story_english"), 1400)
     if not story:
         story = "A factual account has not yet been provided."
-    story_status = "user_edited" if story_override.strip() else "ai_suggested" if (ai or {}).get("story_english") else "reported"
+    story_status = "user_edited" if story_override.strip() else "reported" if grounded_story else "ai_suggested"
     identity = _value(case_id, 48) or "CW-" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:10].upper()
     compiled_summary = structured_facts_summary(original["summary"]["category_label"], subtype["label"], facts, evidence, context)
 

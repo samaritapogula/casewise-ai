@@ -223,16 +223,16 @@ def make_pdf(request: Request):
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     result = BytesIO()
-    doc = SimpleDocTemplate(result, pagesize=A4, topMargin=46, bottomMargin=48, leftMargin=54, rightMargin=54)
+    doc = SimpleDocTemplate(result, pagesize=A4, topMargin=40, bottomMargin=42, leftMargin=50, rightMargin=50)
     styles = getSampleStyleSheet()
-    normal = ParagraphStyle("LetterText", parent=styles["Normal"], fontName="Helvetica", fontSize=10, leading=15.5, spaceAfter=7)
-    header = ParagraphStyle("LetterHeader", parent=normal, fontName="Helvetica-Bold", fontSize=13, leading=19, spaceAfter=10, textColor=colors.HexColor("#102840"), alignment=TA_CENTER)
-    caption = ParagraphStyle("LetterCaption", parent=normal, fontSize=8.5, leading=12, textColor=colors.HexColor("#6E7E88"))
-    subject = ParagraphStyle("LetterSubject", parent=normal, fontName="Helvetica-Bold", fontSize=10.5, leading=15, textColor=colors.HexColor("#183F55"))
+    normal = ParagraphStyle("LetterText", parent=styles["Normal"], fontName="Helvetica", fontSize=9.7, leading=14.2, spaceAfter=4)
+    header = ParagraphStyle("LetterHeader", parent=normal, fontName="Helvetica-Bold", fontSize=12.5, leading=17, spaceAfter=8, textColor=colors.HexColor("#102840"), alignment=TA_CENTER)
+    caption = ParagraphStyle("LetterCaption", parent=normal, fontSize=8.5, leading=11.5, textColor=colors.HexColor("#6E7E88"))
+    subject = ParagraphStyle("LetterSubject", parent=normal, fontName="Helvetica-Bold", fontSize=10.3, leading=14.5, textColor=colors.HexColor("#183F55"))
     story = []
     for index, line in enumerate(draft_text.split("\n")):
         if not line.strip():
-            story.append(Spacer(1, 7))
+            story.append(Spacer(1, 4.5))
         else:
             # Only escaped user input is ever passed to ReportLab markup.
             chosen_style = header if index == 0 else caption if index == 1 or line.startswith("REVIEW BEFORE") else subject if line.startswith("Subject:") or line.rstrip().endswith(":") or line.startswith("PURPOSE - ") else normal

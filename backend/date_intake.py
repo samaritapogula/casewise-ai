@@ -62,6 +62,15 @@ def _actions(text: str) -> set[str]:
     return result
 
 
+def event_action_labels(text: str) -> set[str]:
+    """Comparable reported actions for chronology reconciliation.
+
+    Does not assert two events are identical; callers must also require
+    a direct date-answer link and matching reported date.
+    """
+    return _actions(text)
+
+
 def _normalize_full(value: str) -> str:
     value = re.sub(r",\s*", " ", value.strip())
     for fmt in ("%d %B %Y", "%B %d %Y", "%d %b %Y", "%b %d %Y",

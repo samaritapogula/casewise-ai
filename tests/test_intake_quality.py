@@ -346,3 +346,99 @@ def test_unknown_answer_after_date_clarification_does_not_loop():
     final = build_case(messages, asked_fields=["event_date"])
     assert "event_date" in final["unknown_fields"]
     assert final["next_question"]["field"] != "event_date"
+
+
+
+def test_context_only_answer_not_appended_to_narrative_or_every_draft():
+    """The same clean reviewed story must feed five different documents."""
+    story = BUYER_STORY
+    initial = build_case(user(story))
+    messages = [
+        *user(story),
+        {"role": "assistant", "content": initial["next_question"]["text"]},
+        {"role": "user", "content": "I complained on 20 October 2026. The seller refused my refund request on 21 October 2026."},
+        {"role": "assistant", "content": "What refund or return terms, if any, did the seller provide?"},
+        {"role": "user", "content": "did not provide any"},
+    ]
+    case = build_case(messages)
+    assert case["narrative"]["text"] == story
+    assert "did not provide any" not in case["narrative"]["text"]
+    assert case["facts"]["event_date"]["value"] == "21 October 2026"
+    context = {q["id"]: q for q in case["context"]["questions"]}
+    assert context["consumer_refund_terms"]["answer"] == "did not provide any"
+    assert len(case["timeline"]) == 4
+    assert [row["date"] for row in case["timeline"]] == [
+        "10 October 2026", "18 October 2026", "20 October 2026", "21 October 2026",
+    ]
+    refusal_rows = [row for row in case["timeline"] if "refused" in row["event"].lower()]
+    assert len(refusal_rows) == 1
+    assert refusal_rows[0]["date"] == "21 October 2026"
+    assert refusal_rows[0]["date_source_message"] == 2
+    assert "refused" in refusal_rows[0]["date_source_excerpt"].lower()
+    assert any("complained" in row["event"].lower() for row in case["timeline"])
+    for document_type in ("request", "notice", "complaint", "reply", "application"):
+        from backend.engine import make_draft
+        doc = make_draft(messages, {
+            "counterparty": "TechZone Electronics",
+            "location": "Hyderabad, Telangana",
+            "event_date": "21 October 2026",
+            "amount": "₹55,000",
+            "evidence": "invoice, receipt, email",
+            "desired_resolution": "a full refund",
+            "facts_narrative": case["narrative"]["text"],
+        }, "consumer", confirmed=True, document_type=document_type)
+        assert story.replace("₹", "INR ")[:36] in doc
+        assert "did not provide any" not in doc
+        assert "TechZone Electronics" in doc
+        assert "INR 55,000" in doc
+
+
+@pytest.mark.parametrize("category_story,answer,expected_date", [
+    ("My landlord refused to return my deposit.", "The landlord refused on 5 October 2026.", "5 October 2026"),
+    ("My employer refused to pay my salary.", "The employer refused on 5 October 2026.", "5 October 2026"),
+    ("My client refused to pay my invoice.", "The client refused on 5 October 2026.", "5 October 2026"),
+])
+def test_cross_category_direct_date_reply_reuses_undated_event(category_story, answer, expected_date):
+    intro = build_case(user(category_story))
+    # Give the date answer in direct response to a date-specific question;
+    # other fields can remain missing and must not acquire invented facts.
+    message = (
+        "When did this reported event happen: " +
+        intro["facts"]["key_event"]["value"] +
+        "? If you do not know, say 'not known'."
+    )
+    case = build_case([
+        *user(category_story),
+        {"role": "assistant", "content": message},
+        {"role": "user", "content": answer},
+    ])
+    assert case["facts"]["event_date"]["value"] == expected_date
+    assert len([row for row in case["timeline"] if row["event_kind"] == "event"]) == 1
+    assert case["timeline"][0]["date"] == expected_date
+
+
+
+@pytest.mark.parametrize("document_type", ("request", "notice", "complaint", "reply", "application"))
+def test_standard_length_draft_uses_compact_non_orphaned_pdf_layout(document_type):
+    payload = {
+        "messages": user(BUYER_STORY),
+        "category": "consumer",
+        "confirmed": True,
+        "document_type": document_type,
+        "profile": {
+            "counterparty": "TechZone Electronics",
+            "location": "Hyderabad, Telangana",
+            "event_date": "21 October 2026",
+            "amount": "₹55,000",
+            "evidence": "invoice, receipt, email",
+            "desired_resolution": "a full refund",
+            "facts_narrative": BUYER_STORY,
+        },
+    }
+    result = client.post("/api/draft", json=payload)
+    assert result.status_code == 200, result.text
+    pages = PdfReader(BytesIO(result.content)).pages
+    assert len(pages) == 1, (document_type, len(pages))
+    words = pages[0].extract_text()
+    assert "REVIEW BEFORE SENDING" in words
+    assert "TechZone Electronics" in words

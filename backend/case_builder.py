@@ -255,6 +255,23 @@ def _issues(messages: list[dict], values: dict, resolved: set[str]) -> list[dict
             "message": "Several dates appear in the story. Confirm which date belongs to the key event; different dates do not automatically conflict.",
             "examples": dates[:5],
         })
+    # Contradictory claims are only suggestions for the user to clarify.
+    # They may describe different dates, transactions or partial payments.
+    statement_pairs = (
+        ("refund_status", r"\b(?:i received|i got|seller refunded)\b.{0,25}\brefund\b",
+         r"\b(?:not received|never received|did not receive|haven't received|no refund|refused (?:the )?refund)\b"),
+        ("payment_status", r"\b(?:client|company|employer)\b.{0,35}\b(?:has paid|paid me|sent the payment)\b",
+         r"\b(?:client|company|employer)\b.{0,35}\b(?:has not paid|didn't pay|refused to pay)\b"),
+    )
+    for issue_id, positive, negative in statement_pairs:
+        if re.search(positive, text, re.I) and re.search(negative, text, re.I):
+            issues.append({
+                "id": "statement_" + issue_id,
+                "type": "possible_conflict",
+                "field": "key_event",
+                "message": "Statements about payment or refund status appear different. Clarify whether these describe different events, a partial payment or a correction.",
+                "examples": ["Different outcome statements were mentioned"],
+            })
     return [{**issue, "resolved": issue["id"] in resolved} for issue in issues]
 
 

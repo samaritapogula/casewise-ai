@@ -226,3 +226,24 @@ cd frontend && npm test && npm run build
 **Document choices:** The Overview and Action plan tabs now display five direct draft choices: **Resolution request**, **Legal notice outline**, **Complaint draft**, **Reply draft**, and **Application for assistance**. Choosing one opens the pre-existing fact-review dialog with that type selected. The recipient may be edited separately; complaint and application drafts use a neutral unverified authority placeholder rather than assuming the counterparty is the recipient. These are *drafts*, never official submissions. Urgent/criminal intake and reviewed-facts constraints remain enforced by the backend.
 
 **Test:** Enter the fictional ₹30,000 rental-deposit example, answer the other-party question with a name, then check that the timeline includes payment of deposit, move-out date and non-return—not the name, requested outcome or evidence list. Download the reviewed Case File PDF/JSON; then choose a document type and review its recipient and text before generating.
+
+
+## Purpose-specific document generator (November 2026)
+
+The five **Overview** and **Action plan** document choices generate distinct, downloadable documents rather than renaming one general-purpose letter. Each choice opens the review form and uses the same reviewed data to generate a **text preview** or a PDF:
+
+| Choice | Actual generated sections |
+| --- | --- |
+| Resolution request | Purpose, factual account, key details, earlier attempts, requested resolution and written response request |
+| Legal notice outline | Parties, alleged facts, reported materials, earlier communications, proposed remedy and questions for qualified lawyer review |
+| Complaint draft | Grievance, reported facts, evidence, earlier complaint steps, requested action from the receiving office and procedural checks |
+| Reply draft | Actual incoming communication, specific disputed points, factual response, supporting materials, clarifications and legal-review warnings |
+| Application for assistance | Type of help requested, reason, background, evidence, previous steps and assistance requested |
+
+Relevant additional fields appear in the review form. If important information (such as the original notice being answered) is missing, the document clearly displays a placeholder rather than inventing an allegation, law, or deadline. Complaints and applications address the reviewed recipient/office or show an unverified-office placeholder. Name and contact remain optional.
+
+**Preview API:** \`POST /api/draft-preview\` accepts the same reviewed payload as \`POST /api/draft\` and returns the exact draft body as text. Both routes require explicit user review, enforce the urgent/criminal case block and never send or file a document automatically. Each downloadable PDF contains the review warnings.
+
+To check: run CaseWise locally, describe a **fictional** dispute, open **Overview**, choose each document card, enter relevant extra details, check the acknowledgment, click **Generate text preview**, and then **Download PDF**. Compare the sections across the five documents. For a reply, enter the actual received communication or verify that the draft shows a visible missing-information placeholder.
+
+Automated checks: \`python -m pytest -q\` (backend) and \`cd frontend && npm test && npm run build\` (frontend).

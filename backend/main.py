@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+import json
 from typing import Any
 import os
 from xml.sax.saxutils import escape
@@ -187,6 +188,31 @@ def rehearse(request: PracticeRequest):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@app.post("/api/draft-preview")
+def preview_draft(request: Request):
+    """Preview the same reviewed draft text that the PDF generator will use.
+
+    Acknowledgement is required just as for exporting a PDF. This preview
+    remains informational and does not send or file any communication.
+    """
+    try:
+        draft_text = make_draft(
+            as_dict(request), request.profile, request.category,
+            confirmed=request.confirmed, document_type=request.document_type,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return Response(
+        content=json.dumps({
+            "document_type": request.document_type,
+            "draft": draft_text,
+            "disclaimer": "Editable, user-reviewed text only. Never an automatic filing or legal opinion.",
+        }),
+        media_type="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.post("/api/draft")
 def make_pdf(request: Request):
     try:
@@ -206,8 +232,8 @@ def make_pdf(request: Request):
             story.append(Spacer(1, 7))
         else:
             # Only escaped user input is ever passed to ReportLab markup.
-            chosen_style = header if index == 0 else caption if index == 1 or line.startswith("REVIEW BEFORE") else subject if line.startswith("Subject:") or line == "Requested resolution:" else normal
+            chosen_style = header if index == 0 else caption if index == 1 or line.startswith("REVIEW BEFORE") else subject if line.startswith("Subject:") or line.rstrip().endswith(":") or line.startswith("PURPOSE - ") else normal
             story.append(Paragraph(escape(line.replace("₹", "INR ")).replace("\n", " "), chosen_style))
     doc.build(story)
     result.seek(0)
-    return StreamingResponse(result, media_type="application/pdf", headers={"Content-Disposition": 'attachment; filename="casewise-draft-request.pdf"', "Cache-Control": "no-store"})
+    return StreamingResponse(result, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="casewise-{request.document_type}-draft.pdf"', "Cache-Control": "no-store"})

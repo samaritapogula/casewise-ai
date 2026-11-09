@@ -151,57 +151,89 @@ def draft_narrative(messages: list[dict[str, str]]) -> str:
 
 
 
+
+def _readable_evidence(raw: str) -> str:
+    """Normalize duplicated short tags, without inventing supporting records."""
+    labels = [term.strip() for term in raw.split(",") if term.strip()]
+    found = {label.casefold() for label in labels}
+    if "whatsapp" in found and "messages" in found:
+        labels = [label for label in labels if label.casefold() != "messages"]
+    readable = []
+    seen = set()
+    for label in labels:
+        normalized = "WhatsApp messages" if label.casefold() == "whatsapp" else label
+        key = normalized.casefold()
+        if key not in seen:
+            readable.append(normalized)
+            seen.add(key)
+    return ", ".join(readable)
+
+
+def _normalize_money_grammar(text: str) -> str:
+    """Convert common INR expressions without modifying numerical claims."""
+    return re.sub(r"\ba (?=INR\s+\d)", "an ", text.replace("₹", "INR "), flags=re.I)
+
+
 def make_draft(messages: list[dict[str, str]], profile: dict[str, Any] | None = None,
                category: str = "auto", *, confirmed: bool = False, document_type: str = "request") -> str:
-    """Build a reviewable factual letter, never a formal legal notice.
+    """Generate a category-appropriate, *type-specific* editable draft.
 
-    Both essential details and an explicit review confirmation are validated on
-    the server, not just in the React UI.
+    This is not an official legal instrument. Only user-provided or reviewed
+    details appear as assertions. Unsupported facts are explicit placeholders.
+    No statutory provision, limitation period, legal entitlement, forum or
+    mandatory response deadline is inferred.
     """
     analysis = analyze(messages, profile, category)
     if analysis["needs_lawyer"]:
         raise ValueError("Draft generation disabled for potentially urgent or criminal matters; seek a qualified lawyer.")
     if not confirmed:
         raise ValueError("Review the proposed facts and confirm they are accurate before generating a PDF.")
-
     if document_type not in {"request", "notice", "complaint", "reply", "application"}:
         raise ValueError("Unsupported document type.")
 
+    provided = profile or {}
     facts = analysis["profile_used"]
     required = ("counterparty", "location", "event_date", "desired_resolution")
     missing = [PROFILE_LABELS[key] for key in required if not facts[key].strip()]
     if missing:
         raise ValueError("Please complete these details before generating a PDF: " + ", ".join(missing))
 
-    story = clean((profile or {}).get("facts_narrative"), 1400) or draft_narrative(messages)
-    story = draft_narrative([{"role": "user", "content": story}])
-    if not story:
+    narrative = clean(provided.get("facts_narrative"), 1400) or draft_narrative(messages)
+    narrative = draft_narrative([{"role": "user", "content": narrative}])
+    if not narrative:
         raise ValueError("Please enter at least one factual statement about the dispute (not just a question).")
 
-    sender = clean((profile or {}).get("sender_name"), 160) or "[Your full name]"
-    contact = clean((profile or {}).get("sender_contact"), 180) or "[Your contact information]"
+    sender = clean(provided.get("sender_name"), 160) or "[Your full name]"
+    contact = clean(provided.get("sender_contact"), 180) or "[Your contact information]"
     counterparty = facts["counterparty"]
-    chosen_recipient = clean((profile or {}).get("recipient_name"), 180)
     office_document = document_type in {"complaint", "application"}
-    recipient = chosen_recipient or (
+    recipient = clean(provided.get("recipient_name"), 180) or (
         "[Relevant office or authority - verify before use]"
         if office_document else counterparty
     )
     location = facts["location"]
-    amount = facts["amount"].replace("₹", "INR ")
-    event_date = facts["event_date"]
-    evidence = facts["evidence"].replace(" (mentioned by user; availability unconfirmed)", "")
+    amount = _normalize_money_grammar(facts["amount"])
+    date = facts["event_date"]
+    evidence = _readable_evidence(
+        facts["evidence"].replace(" (mentioned by user; availability unconfirmed)", "")
+    )
     remedy = facts["desired_resolution"].rstrip(" .")
+    prior_contact = clean(provided.get("prior_contact"), 600)
+    received_communication = clean(provided.get("received_communication"), 700)
+    reply_points = clean(provided.get("reply_points"), 700)
+    assistance = clean(provided.get("assistance_requested"), 600)
+    office_action = clean(provided.get("office_action"), 600)
     category_label = analysis["summary"]["category_label"]
+    story = _normalize_money_grammar(narrative)
 
-    document_config = {
-        "request": ("DRAFT REQUEST FOR RESOLUTION", "Request for resolution", "I am writing to seek a resolution of the matter described below."),
-        "notice": ("DRAFT NOTICE OUTLINE - LAWYER REVIEW REQUIRED", "Proposed notice requesting resolution", "This is a proposed notice of the matter for review by a qualified lawyer; it does not assert any legal conclusions."),
-        "complaint": ("DRAFT COMPLAINT - CHECK RECIPIENT AND PROCEDURE", "Draft complaint", "I am writing to describe a grievance for the appropriate recipient to review. Please verify the authority and filing process."),
-        "reply": ("DRAFT REPLY - LAWYER REVIEW ADVISED", "Proposed reply regarding dispute", "I am replying to the concerns raised about the matter below. This draft does not admit or deny allegations beyond the facts I have confirmed."),
-        "application": ("DRAFT APPLICATION FOR ASSISTANCE", "Request for assistance", "I am requesting guidance or assistance with the matter described below. Please verify the appropriate office and its application process."),
+    headings = {
+        "request": ("DRAFT REQUEST FOR RESOLUTION", "Request to resolve a reported civil dispute"),
+        "notice": ("DRAFT NOTICE OUTLINE - LAWYER REVIEW REQUIRED", "Proposed notice - facts and remedy for legal review"),
+        "complaint": ("DRAFT COMPLAINT - CHECK RECIPIENT AND PROCEDURE", "Complaint for appropriate authority to consider"),
+        "reply": ("DRAFT REPLY - LAWYER REVIEW ADVISED", "Proposed response to a communication or claim"),
+        "application": ("DRAFT APPLICATION FOR ASSISTANCE", "Application requesting guidance or assistance"),
     }
-    heading, subject, opening = document_config[document_type]
+    heading, subject = headings[document_type]
     lines = [
         "CASEWISE AI | " + heading,
         "For review only - not a formal legal notice, official filing or legal advice.",
@@ -209,33 +241,133 @@ def make_draft(messages: list[dict[str, str]], profile: dict[str, Any] | None = 
         f"From: {sender}",
         f"Contact: {contact}",
         f"To: {recipient}",
-        *( [f"Party concerned: {counterparty}"] if office_document else [] ),
+    ]
+    if office_document:
+        lines.append(f"Party concerned: {counterparty}")
+    lines.extend([
         f"City / State: {location}",
-        "Date prepared: [Add the date on which you send this letter]",
+        "Date prepared: [Add the date on which you send this draft]",
         "",
         f"Subject: {subject} - {category_label}",
         "",
         "Dear Sir/Madam,",
         "",
-        opening + " The following is my account of the events:",
-        story,
-        "",
-        f"Relevant event date: {event_date}",
+    ])
+    details = [
+        f"Reported relevant date: {date}",
+        *([f"Reported amount involved: {amount}"] if amount else []),
+        *([f"Supporting materials mentioned by the user: {evidence} (not independently verified)"] if evidence else []),
     ]
-    if amount:
-        lines.append(f"Amount involved: {amount}")
-    if evidence:
-        lines.append(f"Documents or evidence identified: {evidence}")
-    lines += [
-        "",
-        "Requested resolution:",
-        remedy[0].upper() + remedy[1:] + "." if remedy else "[Specify your requested resolution].",
-        "",
-        "Please acknowledge this communication in writing. I would prefer an appropriate, peaceful resolution and a written record of correspondence.",
+    if document_type == "request":
+        lines.extend([
+            "Purpose of this request:",
+            "I am requesting an explanation and a possible resolution of the matter described below.",
+            "",
+            "My account of what happened:",
+            story,
+            "",
+            "Key details:",
+            *details,
+            "",
+            "Previous attempts to resolve the matter:",
+            prior_contact or "[Add any earlier conversations, payment requests or responses, if applicable.]",
+            "",
+            "Resolution I am asking for:",
+            remedy + ".",
+            "",
+            "Please review these details and provide a written response. I would like to resolve the matter constructively and keep a record of our correspondence.",
+        ])
+    elif document_type == "notice":
+        lines.extend([
+            "PURPOSE - PROPOSED NOTICE FOR A QUALIFIED LAWYER TO REVIEW",
+            "This outline records the reported dispute and a proposed remedy. A lawyer must check the facts, applicable law, recipient, appropriate service and any deadline before it is used as a legal notice.",
+            "",
+            "1. Parties and relationship:",
+            f"The reported other party is {counterparty}. The matter relates to {category_label.lower()} in {location}.",
+            "",
+            "2. Facts alleged by the sender (unverified):",
+            story,
+            "",
+            "3. Relevant transaction and reported supporting materials:",
+            *details,
+            "",
+            "4. Earlier communications or attempts to settle:",
+            prior_contact or "[Describe any earlier requests, replies or steps taken; do not invent correspondence.]",
+            "",
+            "5. Proposed resolution for legal review:",
+            remedy + ".",
+            "",
+            "6. Questions for the reviewing lawyer:",
+            "Confirm the legal basis, the recipient, the accuracy of allegations, any applicable response period, service requirements, limitation periods and appropriate forum. No statutory provision or deadline is asserted by this outline.",
+        ])
+    elif document_type == "complaint":
+        lines.extend([
+            "Nature of grievance:",
+            f"This is a reported {category_label.lower()} dispute involving {counterparty}.",
+            "",
+            "Statement of reported facts:",
+            story,
+            "",
+            "Key details and supporting materials:",
+            *details,
+            "",
+            "Steps taken before this complaint:",
+            prior_contact or "[Describe any communication with the other party, or state that none was attempted.]",
+            "",
+            "Action requested from the receiving organization:",
+            office_action or remedy + ".",
+            "",
+            "Procedural and jurisdictional verification:",
+            "Please confirm that the recipient is the appropriate organization and advise on applicable forms, supporting material and the process, if this matter falls within its scope. No filing eligibility or jurisdiction has been determined.",
+        ])
+    elif document_type == "reply":
+        lines.extend([
+            "REFERENCE TO COMMUNICATION RECEIVED:",
+            received_communication or "[Provide details of the notice, complaint, demand or allegation received, including its date and sender. No incoming notice has been verified.]",
+            "",
+            "The points I am responding to:",
+            reply_points or "[Quote or accurately summarize the specific points raised by the other party. Do not assume what they alleged.]",
+            "",
+            "My factual account for review:",
+            story,
+            "",
+            "Details and materials I can refer to:",
+            *details,
+            "",
+            "Clarifications or resolution requested:",
+            remedy + ".",
+            "",
+            "Reservation for professional review:",
+            "This is only a proposed factual response. It is not an admission, a formal denial, a court pleading or a response to a verified notice. A lawyer should check the original communication, relevant dates and consequences before use.",
+        ])
+    elif document_type == "application":
+        lines.extend([
+            "Type of assistance sought:",
+            assistance or "[Specify the assistance needed, such as guidance, legal aid, mediation information or help identifying a suitable procedure.]",
+            "",
+            "Why I am requesting assistance:",
+            f"I am seeking information or support in relation to a reported {category_label.lower()} dispute involving {counterparty}.",
+            "",
+            "Background and reported facts:",
+            story,
+            "",
+            "Relevant details and supporting materials:",
+            *details,
+            "",
+            "Prior steps, if any:",
+            prior_contact or "[Describe any prior contact with the other party or a public office, if applicable.]",
+            "",
+            "Assistance or response requested from this office:",
+            assistance or "[Explain exactly what guidance, service or assistance you want this office to consider.]",
+            "",
+            "Eligibility and procedure:",
+            "Please advise whether this office can assist and what process, eligibility rules or forms apply. This draft does not claim entitlement to a particular service.",
+        ])
+    lines.extend([
         "",
         "Sincerely,",
         sender,
         "",
-        "REVIEW BEFORE SENDING: Confirm each statement, the recipient, dates, documents, amount and requested outcome. Seek qualified legal review if necessary. This letter is not a court filing or formal legal notice.",
-    ]
-    return "\n".join(lines)
+        "REVIEW BEFORE SENDING: Confirm every statement, the intended recipient, the record being answered (if any), dates, evidence, requested action and local procedure. Seek qualified legal review where necessary. This draft is not a court filing or formal legal notice.",
+    ])
+    return "\n".join(_normalize_money_grammar(line) for line in lines)

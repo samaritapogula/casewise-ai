@@ -54,6 +54,7 @@ def case_as_pdf(file: dict) -> bytes:
         value = entry.get("value", "") or "Not supplied"
         add("%s: %s (%s)" % (title, value, entry.get("status", "missing")))
     add("Compiled reported facts (not independently verified)", section)
+    add(file.get("structured_summary", {}).get("narrative", ""), small)
     for entry in file.get("structured_summary", {}).get("items", []):
         add(entry["label"] + ": " + entry["value"])
     add("Reviewed case narrative", section)

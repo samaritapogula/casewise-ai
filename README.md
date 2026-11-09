@@ -148,3 +148,35 @@ This repo contains only synthetic test examples and published official URLs. **D
 5. Also test microphone permission denied or speech service unavailable. Text entry must continue working.
 
 Browser speech recognition can rely on an external browser speech provider and may have availability/time limits. See the [SpeechRecognition API](https://developer.mozilla.org/en-US/docs/Web/API/SpeechRecognition).
+
+
+## Phase 2 — Intelligent Case Builder
+
+**Approved features A, B, C, D, E, F, G, H and J** are implemented in the existing React/FastAPI app. No document upload (Feature I) is included.
+
+- **Classification:** Detect the civil category and a narrower subtype; select the category manually or correct the subtype in Review & export.
+- **Facts and provenance:** Extract reported parties, location, amount, important dates, event, role and requested remedy. Case fields are labelled reported, user-edited or missing. Original conversation references are retained when deterministically identifiable. Gemini suggestions are never described as verified facts.
+- **Timeline:** Order explicitly dated reported events, preserve uncertain dates as unknown/relative, and allow user edits.
+- **Evidence:** List mentioned supporting material, distinguish reported availability from actual verification, and allow user edits without uploading files.
+- **Follow-ups:** Ask the next high-priority missing question. The browser tracks asked fields to avoid repeatedly asking the same question.
+- **Review:** Edit the narrative and case values; the review checkbox resets after changes.
+- **Contradictions:** Flag potentially differing monetary amounts, dates and obvious payment/refund wording for clarification; flags are not legal findings.
+- **Completeness:** An eight-check information-collection indicator; it does not measure legal strength, likelihood of success or filing readiness.
+- **Export:** Download reviewed case data as PDF or JSON. Both contain review and verification limitations. The API requires an explicitly reviewed, non-empty case narrative.
+
+**New endpoints:** \`POST /api/case-file\` rebuilds the current case from messages, edits and reviewed fields. \`POST /api/case-export\` requires \`reviewed=true\` and \`story_override\`; set \`export_format=pdf\` or \`export_format=json\`. The original \`/api/analyze\`, \`/api/draft\` and \`/api/practice\` remain available.
+
+Case data is held in the current React browser session and reconstructed per request; no server-side database is added. Be cautious with identifying details because configured Gemini calls can send the conversation to an external model. Browser speech recognition can also use an external speech provider.
+
+### Test Phase 2 on a Mac
+
+\`\`\`bash
+cd ~/Desktop/casewise-ai
+git pull --ff-only origin main
+bash scripts/run_mac.sh
+\`\`\`
+
+Type a **fictional** dispute (for example a rental deposit not returned), answer the follow-up questions, then open **Timeline**, **Evidence**, and **Review & export**. Edit one fact, save, confirm the narrative, and download a case-file PDF and JSON. Try different amounts to exercise discrepancy flags. Avoid real personal or legal-case data in the demonstration.
+
+Automated checks: \`python -m pytest -q\`, then \`cd frontend && npm test && npm run build\`. These are functional tests, **not** validation of legal accuracy. Human legal review remains necessary.
+

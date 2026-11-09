@@ -262,10 +262,13 @@ export default function App() {
   }
   function openDraftReview() {
     if (!analysis || analysis.needs_lawyer || busy) return;
-    // Prefer an explicit correction in Case details over auto-detected text.
     const autoFields = analysis.profile_used || {};
-    setDraftProfile({ ...emptyProfile, ...autoFields, ...Object.fromEntries(Object.entries(profile).filter(([, value]) => value?.trim())), sender_name: '', sender_contact: '' });
-    setDraftFacts(analysis.summary.ai_extracted_case?.story_english || analysis.summary.draft_facts || '');
+    const caseFacts = analysis.case_file?.facts || {};
+    const corrected = Object.fromEntries(fieldConfig.map(([key]) => [
+      key, profile[key]?.trim() || caseFacts[key]?.value || autoFields[key] || '',
+    ]));
+    setDraftProfile({ ...emptyProfile, ...autoFields, ...corrected, sender_name: '', sender_contact: '' });
+    setDraftFacts(caseStory.trim() || analysis.case_file?.narrative?.text || analysis.summary.draft_facts || '');
     setDraftConfirmed(false);
     setReviewError('');
     setReviewOpen(true);

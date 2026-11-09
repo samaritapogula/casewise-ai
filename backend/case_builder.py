@@ -291,7 +291,9 @@ def build_case(
     case_id: str = "",
 ) -> dict:
     """Rebuild a case on each call. Corrections win over suggestions; nothing persists."""
-    original = analyze(messages, profile, category)
+    ai_category = (ai or {}).get("category")
+    effective_category = ai_category if category == "auto" and ai_category in SUBTYPES else category
+    original = analyze(messages, profile, effective_category)
     chosen = original["summary"]["category"]
     text = "\n".join(_value(m.get("content"), 2000) for m in messages if m.get("role") == "user")
     base = original["profile_used"]

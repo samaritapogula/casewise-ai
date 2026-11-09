@@ -53,12 +53,17 @@ def case_as_pdf(file: dict) -> bytes:
         entry = file["facts"].get(key, {})
         value = entry.get("value", "") or "Not supplied"
         add("%s: %s (%s)" % (title, value, entry.get("status", "missing")))
+    add("Compiled reported facts (not independently verified)", section)
+    add(file.get("structured_summary", {}).get("narrative", ""), small)
+    for entry in file.get("structured_summary", {}).get("items", []):
+        add(entry["label"] + ": " + entry["value"])
     add("Reviewed case narrative", section)
     add(file["narrative"]["text"])
     add("Timeline", section)
     for row in file["timeline"]:
         add("%s — %s [status: %s; source: %s]" % (
-            row["date"] or "Date unknown", row["event"], row["status"],
+            row["date"] or "Date unknown",
+            ("[Ongoing status] " if row.get("event_kind") == "ongoing_status" else "") + row["event"], row["status"],
             "message %s" % (row["source_message"] + 1) if row["source_message"] is not None else "unverified suggestion"))
     if not file["timeline"]:
         add("No dated events collected.")
@@ -68,6 +73,15 @@ def case_as_pdf(file: dict) -> bytes:
             (entry["type"], entry["description"], entry["availability"]))
     if not file["evidence"]:
         add("No evidence identified in the conversation.")
+    detail_questions = file.get("context", {}).get("questions", [])
+    if detail_questions:
+        add("Additional case-specific information", section)
+        for item in detail_questions:
+            add(item["label"] + ": " + (
+                item["answer"] if item.get("status") != "missing"
+                else "[Not yet provided]"
+            ))
+        add("Optional questions do not establish legal merit or form requirements.", small)
     add("Unresolved clarifications", section)
     missing = file["missing"]
     if missing:

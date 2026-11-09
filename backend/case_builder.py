@@ -11,6 +11,8 @@ from datetime import datetime
 from typing import Any
 
 from .engine import AMOUNT_PATTERN, clean, analyze, draft_narrative
+from .evidence_recognition import extract_evidence
+from .case_enrichment import build_context, explicit_unknown_fields, structured_facts_summary, event_kind
 
 FIELD_LABELS = {
     "user_role": "Your role",
@@ -193,6 +195,7 @@ def _timeline(messages: list[dict], ai: dict | None, edits: list[dict] | None) -
                 "id": _value(row.get("id"), 70) or "edit-%d" % i,
                 "date": date,
                 "event": event,
+                "event_kind": event_kind(event),
                 "date_status": "explicit" if _date_sort(date) else "relative_or_unknown",
                 "status": "user_edited",
                 "source_message": row.get("source_message") if isinstance(row.get("source_message"), int) else None,
@@ -206,6 +209,7 @@ def _timeline(messages: list[dict], ai: dict | None, edits: list[dict] | None) -
             "id": "m%d-e%d" % (index, n),
             "date": date,
             "event": segment,
+            "event_kind": event_kind(segment),
             "date_status": "explicit" if _date_sort(date) else "relative_or_unknown",
             "status": "reported",
             "source_message": index,
@@ -240,44 +244,8 @@ def _narrative_messages(messages: list[dict]) -> list[dict]:
 
 
 def _evidence(messages: list[dict], edits: list[dict] | None) -> list[dict]:
-    if edits is not None:
-        result = []
-        for i, row in enumerate(edits[:18]):
-            if not isinstance(row, dict) or not _value(row.get("description")):
-                continue
-            status = row.get("availability")
-            result.append({
-                "id": _value(row.get("id"), 60) or "evidence-edit-%d" % i,
-                "type": _value(row.get("type"), 60) or "Other",
-                "description": _value(row.get("description"), 300),
-                "availability": status if status in ("mentioned", "user_says_available", "user_says_unavailable", "unknown") else "unknown",
-                "verified": False,
-                "source_message": row.get("source_message") if isinstance(row.get("source_message"), int) else None,
-                "source_excerpt": _value(row.get("source_excerpt"), 160),
-            })
-        return result
+    return extract_evidence(messages, edits)
 
-    found = {}
-    for index, message in enumerate(messages):
-        if message.get("role") != "user":
-            continue
-        content = _value(message.get("content"), 2000)
-        for name, regex in EVIDENCE_TERMS:
-            if not re.search(regex, content, re.I):
-                continue
-            local_context = content
-            unavailable = bool(re.search(r"\b(?:lost|do not have|don't have|no)\b.{0,24}" + regex.replace(r"\b", ""), local_context, re.I))
-            has = bool(re.search(r"\b(?:i have|i've got|i possess|i kept|i saved)\b", local_context, re.I))
-            found[name] = {
-                "id": "evidence-" + name.replace(" ", "-"),
-                "type": name.title(),
-                "description": name.title() + " mentioned in the conversation",
-                "availability": "user_says_unavailable" if unavailable else "user_says_available" if has else "mentioned",
-                "verified": False,
-                "source_message": index,
-                "source_excerpt": content[:160],
-            }
-    return list(found.values())[:18]
 
 
 def _issues(messages: list[dict], values: dict, resolved: set[str]) -> list[dict]:
@@ -341,6 +309,7 @@ def build_case(
     ai: dict | None = None,
     *,
     case_overrides: dict | None = None,
+    context_overrides: dict | None = None,
     timeline_edits: list[dict] | None = None,
     evidence_edits: list[dict] | None = None,
     asked_fields: list[str] | None = None,
@@ -445,6 +414,8 @@ def build_case(
     subtype = _subtype(chosen, text, overrides.get("subtype", ""))
     timeline = _timeline(messages, ai, timeline_edits)
     evidence = _evidence(messages, evidence_edits)
+    context = build_context(chosen, subtype["code"], messages, context_overrides)
+    unknown_fields = explicit_unknown_fields(messages, QUESTIONS)
     if evidence and not _present(fields["evidence"]):
         facts["evidence"]["value"] = ", ".join(item["type"] for item in evidence[:5])
         facts["evidence"]["status"] = "reported"
@@ -465,19 +436,39 @@ def build_case(
     missing = [{"key": key, "label": "Dispute subtype" if key == "subtype" else FIELD_LABELS.get(key, key)}
                for key, filled in checks.items() if not filled]
     # Handle unanswered questions: do not ask the same field again during a session.
-    asked = [key for key in (asked_fields or []) if key in QUESTIONS]
+    allowed_context = {"context:" + row["id"] for row in context["questions"]}
+    asked = [key for key in (asked_fields or [])
+             if key in QUESTIONS or key in allowed_context]
     unanswered = [item["key"] for item in missing]
-    next_field = next((key for key in ("counterparty", "location", "event_date", "desired_resolution", "evidence", "amount", "subtype", "key_event", "user_role")
-                       if key in unanswered and key not in asked), None)
-    question = QUESTIONS.get(next_field) if next_field else (
-        "I've noted the available information. Please review the case file and correct any missing or inconsistent details."
+    next_field = next((key for key in (
+        "counterparty", "location", "event_date", "desired_resolution",
+        "evidence", "amount", "subtype", "key_event", "user_role",
+    ) if key in unanswered and key not in asked), None)
+    question = QUESTIONS.get(next_field)
+    # Additional issue-specific questions start only when the core intake is
+    # answered (an explicitly unknown fact is an acknowledged answer).
+    core_addressed = all(
+        check or key in unknown_fields
+        for key, check in checks.items()
     )
+    if next_field is None and core_addressed and chosen != "other":
+        next_context = next((
+            row for row in context["questions"]
+            if row["status"] == "missing"
+            and "context:" + row["id"] not in asked
+        ), None)
+        if next_context:
+            next_field = "context:" + next_context["id"]
+            question = next_context["question"]
+    if question is None:
+        question = "I've noted the available information. Please review the case file and correct any missing or inconsistent details."
 
     story = _value(story_override, 1400) or _value((ai or {}).get("story_english"), 1400) or _value(draft_narrative(narrative_messages), 1400)
     if not story:
         story = "A factual account has not yet been provided."
     story_status = "user_edited" if story_override.strip() else "ai_suggested" if (ai or {}).get("story_english") else "reported"
     identity = _value(case_id, 48) or "CW-" + hashlib.sha256(text.encode("utf-8")).hexdigest()[:10].upper()
+    compiled_summary = structured_facts_summary(original["summary"]["category_label"], subtype["label"], facts, evidence, context)
 
     return {
         "schema_version": "2.0",
@@ -488,6 +479,9 @@ def build_case(
         "facts": facts,
         "timeline": timeline,
         "evidence": evidence,
+        "context": context,
+        "unknown_fields": unknown_fields,
+        "structured_summary": compiled_summary,
         "issues": issues,
         "missing": missing,
         "completeness": {

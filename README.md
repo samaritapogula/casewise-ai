@@ -247,3 +247,30 @@ Relevant additional fields appear in the review form. If important information (
 To check: run CaseWise locally, describe a **fictional** dispute, open **Overview**, choose each document card, enter relevant extra details, check the acknowledgment, click **Generate text preview**, and then **Download PDF**. Compare the sections across the five documents. For a reply, enter the actual received communication or verify that the draft shows a visible missing-information placeholder.
 
 Automated checks: \`python -m pytest -q\` (backend) and \`cd frontend && npm test && npm run build\` (frontend).
+
+
+## Adaptive case guidance and contextual follow-ups (November 2026)
+
+The case builder is **case-driven**, not programmed for the example rental deposit, amount or landlord. All four supported civil categories use the same algorithms. Subject-specific *question wording and evidence focus* are configured in \`backend/case_policy.json\`; adding a supported subtype requires extending that configuration rather than inserting if/else branches for a specific party or incident.
+
+### How it works
+1. **Essential facts:** when the other party, dispute or desired result are missing, only preservation and fact-collection tasks are shown. The chatbot asks one question at a time.
+2. **Developing record:** when core facts exist but amount, date, location or evidence status need clarification, the plan focuses on these gaps and existing materials.
+3. **Case-specific plan:** when key information has been addressed, tasks reference the **actual reported** other party, desired outcome, disputed amount, date and evidence descriptions. Facts remain unverified.
+4. **Optional issue-specific questions:** after the basic intake, the chatbot can ask prompts configured for the issue's category/subtype. They can also be answered under **Review & export**, and affect the next plan refresh. **8/8 is only a basic information score, not completion of case investigation.**
+5. **Unknown facts are valid:** explicitly saying "not known" does not invent a date or turn an unknown into a positive fact; it allows cautious planning while keeping the gap visible.
+6. **Evidence:** a bank-transfer receipt is one evidence item, not two because matching aliases overlap. Separate records remain separate. User-entered evidence edits are preserved and documents are not verified.
+7. **Timeline:** an ongoing nonpayment or non-return is distinguished from a dated refusal; neither is silently erased.
+8. **Documents:** the five draft options remain available, with contextual suitability labels. No official forum, outcome, entitlement or deadline is invented; existing reviewed-draft and urgent-case safeguards remain.
+
+### Source and AI safety
+The planner is deterministic and uses reviewed case data. Only the curated official-source whitelist can supply statute names/links; neither user input nor Gemini can create legal citations or invent a court route. The model can assist extraction and conversational clarity, but no generated legal opinion is asserted. Exports reproduce what the user reported, including unresolved questions and disclaimer text.
+
+### Developer verification
+
+\`\`\`bash
+python -m pytest -q
+cd frontend && npm test && npm run build
+\`\`\`
+
+Use **fresh case examples from each supported category** and compare the Action plan tab after each new answer. Check that the same case reference is retained, that the plan changes stages, that reported evidence is not duplicated, and that both case and action-plan PDFs reflect the latest facts. As before, cases live only in the current browser session.

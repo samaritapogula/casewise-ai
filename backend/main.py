@@ -61,7 +61,7 @@ def get_sources():
 def analyze_case(request: Request):
     try:
         preliminary = analyze(as_dict(request), request.profile, request.category)
-        proposed = extract_case(as_dict(request), "en") if is_configured() and not preliminary["needs_lawyer"] else None
+        proposed = extract_case(as_dict(request)) if is_configured() and not preliminary["needs_lawyer"] else None
         chosen = request.category
         if chosen == "auto" and proposed and proposed["category"] != "other":
             chosen = proposed["category"]
@@ -89,7 +89,7 @@ def analyze_case(request: Request):
 def rehearse(request: PracticeRequest):
     try:
         data = analyze(as_dict(request), request.profile, request.category)
-        return practice_argument(data, request.argument, "en")
+        return practice_argument(data, request.argument)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

@@ -359,6 +359,18 @@ def build_case(
     overrides = {k: _value(v, 500) for k, v in (case_overrides or {}).items()
                  if k in FIELD_LABELS or k == "subtype"}
     narrative_messages = _narrative_messages(messages)
+    # Prefer the actual disputed event to the entire chat story. Evidence,
+    # requests for a remedy and party-name answers are separate fields.
+    event_segments = _event_segments(messages)
+    disputed = re.compile(
+        r"\b(?:refused|denied|withheld|not returned|has not returned|"
+        r"not paid|has not paid|unpaid|failed to|damaged|broken|breached|overdue)\b",
+        re.I,
+    )
+    central_event = next(
+        (segment for _, segment, _ in reversed(event_segments) if disputed.search(segment)),
+        event_segments[-1][1] if event_segments else draft_narrative(narrative_messages),
+    )
     fields = {
         "counterparty": base["counterparty"],
         "location": base["location"],
@@ -367,7 +379,7 @@ def build_case(
         "evidence": base["evidence"],
         "desired_resolution": base["desired_resolution"],
         "user_role": "",
-        "key_event": _value(draft_narrative(narrative_messages), 500),
+        "key_event": _value(central_event, 500),
     }
     # Suggest user role only when straightforward, not an assertion of legal standing.
     role_patterns = [

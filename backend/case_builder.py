@@ -13,7 +13,8 @@ from typing import Any
 
 from .engine import AMOUNT_PATTERN, clean, analyze, draft_narrative
 from .evidence_recognition import extract_evidence
-from .case_enrichment import build_context, explicit_unknown_fields, structured_facts_summary, event_kind
+from .case_enrichment import (build_context, explicit_unknown_fields, structured_facts_summary,
+                              event_kind, match_primary_question, EVENT_DATE_FOLLOWUP_PREFIX)
 
 FIELD_LABELS = {
     "user_role": "Your role",
@@ -230,7 +231,6 @@ def _narrative_messages(messages: list[dict]) -> list[dict]:
     provenance, but should not become an awkward new sentence in the story.
     """
     cleaned = []
-    questions = {question.casefold() for question in QUESTIONS.values()}
     for index, message in enumerate(messages):
         if message.get("role") != "user":
             continue
@@ -238,7 +238,7 @@ def _narrative_messages(messages: list[dict]) -> list[dict]:
         prev = messages[index - 1] if index else {}
         was_field_answer = (
             prev.get("role") == "assistant"
-            and _value(prev.get("content"), 500).casefold() in questions
+            and match_primary_question(prev.get("content"), QUESTIONS) is not None
         )
         if was_field_answer and len(text) < 140 and not EVENT_PATTERN.search(text):
             continue
@@ -405,7 +405,7 @@ def build_case(
         response = _value(current.get("content"), 300)
         if len(response) > 130 or response.endswith("?") or response.strip().lower() in ("yes", "no", "okay", "ok"):
             continue
-        matching = next((key for key, template in QUESTIONS.items() if template.lower() == question), None)
+        matching = match_primary_question(previous.get("content"), QUESTIONS)
         if not matching or matching not in fields or fields[matching] or matching in overrides:
             continue
         if matching == "event_date":
@@ -471,6 +471,12 @@ def build_case(
     next_field = next((key for key in ordered_missing if key not in asked),
                       ordered_missing[0] if ordered_missing else None)
     question = QUESTIONS.get(next_field)
+    if next_field == "event_date" and central_event:
+        # Ask about the actual disputed event instead of silently equating
+        # an earlier purchase, payment or failure date with its date.
+        description = DATE_RE.sub("", _value(central_event, 160)).strip(" ,.;:")
+        question = (EVENT_DATE_FOLLOWUP_PREFIX + description
+                    + "? If you do not know, say 'not known'.")
     # Additional issue-specific questions start only when the core intake is
     # answered (an explicitly unknown fact is an acknowledged answer).
     core_addressed = all(

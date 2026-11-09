@@ -9,6 +9,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from .adaptive_planning import build_adaptive_plan
+
 SOURCE_REVIEWED = "2026-11-09"
 SOURCES = {
     "nalsa": {
@@ -197,7 +199,10 @@ def build_legal_plan(case: dict, *, completed_actions: dict[str, bool] | None = 
         gaps.append("No supporting document has been confirmed as available by the user.")
     if not case.get("narrative", {}).get("reviewed"):
         gaps.append("The factual narrative has not been explicitly reviewed and confirmed.")
-    gaps = gaps[:10]
+    for question in case.get("context", {}).get("questions", []):
+        if question.get("status") == "missing":
+            gaps.append("Additional context to clarify: " + question.get("label", "a detail") + ".")
+    gaps = gaps[:12]
 
     uncertainties = [
         "The other side's account, defenses and documents have not been independently assessed.",
@@ -210,24 +215,8 @@ def build_legal_plan(case: dict, *, completed_actions: dict[str, bool] | None = 
     else:
         uncertainties.append("Contract or transaction terms may change which options are available.")
 
-    actions = []
-    actions.append(_action("preserve", "Organize your records",
-        "Keep original agreements, invoices, messages, receipts and notices safely. Make a dated list of events.", [], checked))
-    if gaps:
-        actions.append(_action("clarify", "Resolve missing or conflicting facts",
-            "Review the gaps in your Case File and edit statements before relying on them.", [], checked))
-    if risk:
-        actions.append(_action("urgent_advice", "Seek prompt qualified legal help",
-            "A potentially urgent or criminal matter was flagged. Contact a qualified local lawyer promptly; for immediate danger use appropriate emergency services.", ["nalsa"], checked))
-    else:
-        actions.append(_action("contact", "Prepare a factual written request",
-            guide["contact"] + " Save a copy and proof of delivery.", [], checked))
-        if category != "other":
-            channel_ids = [id for id in source_ids if id in ("nch", "ejagriti", "labour", "up_tenancy")]
-            actions.append(_action("channels", "Check the appropriate official channel",
-                "Review the official links below and confirm eligibility, scope, jurisdiction, forms and procedure before filing anything.", channel_ids, checked))
-        actions.append(_action("legal_review", "Confirm law, local venue and deadlines with a professional",
-            "Ask a local lawyer or legal-aid office to review any disputed law, court paper, limitation period and filing route before taking formal action.", ["nalsa"], checked))
+    adaptive = build_adaptive_plan(case, completed_actions=checked, official_source_ids=source_ids)
+    actions = adaptive["actions"]
 
     routes = ([] if risk else [{
         "id": route_id, "title": title, "when_to_consider": reason,
@@ -250,7 +239,7 @@ def build_legal_plan(case: dict, *, completed_actions: dict[str, bool] | None = 
         escalation_reasons.append("Unresolved inconsistencies appear in the case file.")
     escalation_reasons.append("Consult a professional for any deadline, official notice, court document, legal eligibility or dispute-specific decision.")
     return {
-        "schema_version": "3.0", "case_id": case.get("case_id", ""),
+        "schema_version": "3.1", "case_id": case.get("case_id", ""),
         "category": category,
         "position": {
             "heading": guide["title"],
@@ -258,6 +247,10 @@ def build_legal_plan(case: dict, *, completed_actions: dict[str, bool] | None = 
             "considerations": guide["considerations"],
             "status": "Cautious orientation only — not verified legal advice, a rights decision, or an outcome prediction.",
         },
+        "stage": adaptive["stage"],
+        "case_focus": adaptive["case_focus"],
+        "context_questions": adaptive["context_questions"],
+        "document_recommendations": adaptive["document_recommendations"],
         "source_reviewed_on": SOURCE_REVIEWED,
         "source_status": "Official source URLs manually reviewed 9 November 2026; not checked live per request. Law and coverage may change.",
         "sources": sources,

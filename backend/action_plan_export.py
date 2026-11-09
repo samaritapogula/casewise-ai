@@ -33,6 +33,7 @@ def as_pdf(plan: dict) -> bytes:
     for point in plan["position"]["considerations"]:
         para("- " + point)
     para("Reported supporting information (not evidence verified)", h2)
+    para("Statements and supporting documents in this report have NOT been independently verified.", small)
     for statement in plan["supporting_reports"]:
         para("- " + statement)
     para("Unknowns and review gaps", h2)

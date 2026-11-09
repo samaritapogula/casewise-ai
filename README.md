@@ -285,3 +285,22 @@ The existing five draft types (resolution request, legal notice outline, complai
 The **Prepare your factual argument** panel creates a neutral opening, reported key points, possible challenges, questions needing clarification, and closing wording directly from the case file. The existing practice chatbot remains available. No guaranteed outcomes, invented citations, unverified documents, or formal legal filings are produced. Urgent/criminal triggers retain the existing draft and argument restrictions. English-only and no default server-side case persistence continue to apply.
 
 Phase 4 is an educational prototype; legal deadlines, current law, recipient, venue, procedure, evidence and eligibility must be confirmed independently by qualified professionals or official sources before real-world use.
+
+
+## Public deployment: Render (single site with React + FastAPI)
+
+The Dockerfile builds the React/Vite frontend and serves it with the FastAPI API from the same origin. The backend.serve:app production entrypoint preserves all /api routes and mounts the compiled website last. The Render Blueprint is render.yaml; its health check is /api/health. A GitHub Actions smoke workflow checks the built image.
+
+### Publish
+
+1. Visit https://dashboard.render.com/ and connect the GitHub account with access to samaritapogula/casewise-ai.
+2. Choose New > Blueprint and choose this repository on its main branch. Approve the render.yaml configuration to create the web service.
+3. Wait for a Live deployment, open its public HTTPS onrender.com URL, then visit /api/health (look for status: ok).
+4. Test the chat, Timeline, Evidence, review/export, legal plan, document readiness, PDF download and argument preparation.
+5. Optional: set GEMINI_API_KEY in the Render service's private Environment settings and redeploy. With no key, guided-demo mode still works. Never put keys in VITE_* environment variables or Git.
+
+The Blueprint uses the Render free web service plan for a demonstration, which can spin down when idle and has reliability and usage limits. Do not use the public prototype for real or sensitive legal cases without appropriate privacy, security, legal and operational reviews.
+
+Local production check: docker build -t casewise-ai . ; docker run --rm -p 10000:10000 casewise-ai . Open http://localhost:10000/ and http://localhost:10000/api/health.
+
+Ordinary local development remains available with bash scripts/run_mac.sh and http://localhost:5173/.

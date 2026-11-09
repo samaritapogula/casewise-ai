@@ -38,7 +38,7 @@ def select_category(text: str, category: str = "auto") -> str:
     return max(scores, key=scores.get)
 
 
-def profile_from_messages(messages: list[dict[str, str]], profile: dict[str, Any] | None) -> dict[str, str]:
+def profile_from_messages(messages: list[dict[str, str]], profile: dict[str, Any] | None, category: str = "auto") -> dict[str, str]:
     result = {k: clean((profile or {}).get(k), 250) for k in PROFILE_FIELDS}
     user_text = "\n".join(clean(m.get("content"), 2000) for m in messages if m.get("role") == "user")
     if not result["amount"]:
@@ -48,7 +48,7 @@ def profile_from_messages(messages: list[dict[str, str]], profile: dict[str, Any
     if not result["counterparty"]:
         result["counterparty"] = extract_counterparty(
             [clean(m.get("content"), 2000) for m in messages if m.get("role") == "user"],
-            select_category(user_text),
+            select_category(user_text, category),
         )
     if not result["location"]:
         result["location"] = extract_location(
@@ -73,7 +73,7 @@ def analyze(messages: list[dict[str, str]], profile: dict[str, Any] | None = Non
     complete_story = "\n".join(user_messages)
     chosen = select_category(complete_story, category)
     info = CATEGORIES[chosen]
-    fields = profile_from_messages(messages, profile)
+    fields = profile_from_messages(messages, profile, chosen)
     criminal = bool(any(re.search(p, complete_story, re.I) for p in CRIMINAL_PATTERNS))
     urgent = bool(URGENT_PATTERN.search(complete_story))
     missing = [PROFILE_LABELS[k] for k in PROFILE_FIELDS if not fields[k]]

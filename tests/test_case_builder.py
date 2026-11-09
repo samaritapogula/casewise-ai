@@ -186,3 +186,11 @@ def test_legacy_ai_safety_and_drafting_endpoints_remain():
                     "event_date": "Tomorrow", "desired_resolution": "Advice"},
     })
     assert blocked.status_code == 422
+
+
+def test_empty_react_profile_defaults_do_not_claim_user_correction():
+    profile = {"location": "", "counterparty": "", "amount": "", "event_date": "", "evidence": "", "desired_resolution": ""}
+    case = build_case(chat("I paid a ₹15,000 rental deposit and have a receipt."), profile=profile)
+    assert case["facts"]["amount"]["value"] == "₹15,000"
+    assert case["facts"]["amount"]["status"] == "reported"
+    assert case["facts"]["amount"]["sources"]

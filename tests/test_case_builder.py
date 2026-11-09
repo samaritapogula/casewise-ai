@@ -41,7 +41,7 @@ def test_categories_and_subtypes(story, category, subtype):
 def test_date_extraction_timeline_and_provenance():
     case = build_case(chat("On 10 November 2026 the seller refused my refund.",
                            "I first complained on 5 November 2026 and have the invoice."))
-    assert case["facts"]["event_date"]["value"] == "5 November 2026"
+    assert case["facts"]["event_date"]["value"] == "10 November 2026"  # Date attached to refusal, not later chat message
     dates = [row["date"] for row in case["timeline"]]
     assert dates == ["5 November 2026", "10 November 2026"]
     assert all(row["status"] == "reported" for row in case["timeline"])
@@ -83,11 +83,10 @@ def test_possible_amount_conflicts_are_not_assumed_as_genuine_conflicts():
     assert "whether they refer to the same transaction" in case["issues"][0]["message"]
 
 
-def test_multiple_dates_are_clarifications_not_automatic_contradictions():
+def test_different_event_dates_do_not_trigger_false_conflicts():
     case = build_case(chat("I moved out on 2 October 2026.",
                            "I requested my deposit on 5 November 2026."))
-    flag = next(i for i in case["issues"] if i["id"] == "multiple_dates")
-    assert flag["type"] == "clarification"
+    assert not any(i["id"] == "multiple_dates" for i in case["issues"])
 
 
 def test_completeness_is_information_only_and_unknown_date_does_not_count():

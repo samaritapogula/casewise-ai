@@ -85,14 +85,14 @@ def build_document_intelligence(case: dict, document_type: str, profile: dict | 
         prompts.append({
             "key": key, "label": label, "question": f"Please confirm: {label.lower()}?",
             "required": True, "answered": _supplied(value), "value": value,
-            "source": "user reviewed" if _supplied(values.get(key)) else _fact(case, key).get("status", "missing"),
+            "source": "present in review form (user verification still required)" if _supplied(values.get(key)) else _fact(case, key).get("status", "missing"),
         })
     for key, question, required in config["extra"]:
         value = _clean(values.get(key), 700)
         prompts.append({
             "key": key, "label": key.replace("_", " ").capitalize(), "question": question,
             "required": required, "answered": _supplied(value), "value": value,
-            "source": "user reviewed" if _supplied(value) else "missing",
+            "source": "present in review form (user verification still required)" if _supplied(value) else "missing",
         })
 
     warnings = []

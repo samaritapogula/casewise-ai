@@ -67,7 +67,8 @@ def _normalize_full(value: str) -> str:
     for fmt in ("%d %B %Y", "%B %d %Y", "%d %b %Y", "%b %d %Y",
                 "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
         try:
-            return datetime.strptime(value.title(), fmt).strftime("%d %B %Y")
+            parsed = datetime.strptime(value.title(), fmt)
+            return f"{parsed.day} {parsed.strftime('%B %Y')}"
         except ValueError:
             continue
     return ""
@@ -77,7 +78,8 @@ def _normalize_partial(value: str) -> str:
     value = value.strip()
     for fmt in ("%d %B", "%B %d", "%d %b", "%b %d"):
         try:
-            return datetime.strptime(value.title(), fmt).strftime("%d %B")
+            parsed = datetime.strptime(value.title(), fmt)
+            return f"{parsed.day} {parsed.strftime('%B')}"
         except ValueError:
             continue
     # A partial date with Feb 29 may be valid in a leap year: retain rather

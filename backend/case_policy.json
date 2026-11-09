@@ -1,0 +1,284 @@
+{
+  "schema_version": "1.0",
+  "default": {
+    "focus": "Review the agreement or transaction, relevant records and the other party's response before taking formal steps.",
+    "records": "Keep relevant original documents, dates, receipts and messages, and note which items you can actually produce.",
+    "contact": "Consider a factual written clarification request, saving a copy and proof of delivery.",
+    "detail_questions": [
+      {
+        "id": "general_prior_steps",
+        "label": "Prior steps",
+        "question": "Have you already contacted the other party? What was their response, if known?",
+        "purpose": "Clarifies whether an informal resolution has already been attempted."
+      },
+      {
+        "id": "general_terms",
+        "label": "Relevant terms",
+        "question": "Are there any relevant written terms or communications that could affect this dispute?",
+        "purpose": "Helps identify terms that may require legal review."
+      }
+    ],
+    "document_priority": [
+      "request",
+      "application",
+      "complaint",
+      "notice",
+      "reply"
+    ]
+  },
+  "categories": {
+    "property": {
+      "focus": "Review property or tenancy terms, any handover or possession records, and any explanation for the dispute.",
+      "records": "Preserve the relevant agreement, payments, handover records, photographs and communications where available.",
+      "contact": "Consider a factual request to the relevant property counterparty identifying the reported issue and proposed resolution.",
+      "detail_questions": [
+        {
+          "id": "property_terms",
+          "label": "Agreement terms",
+          "question": "What do the relevant written tenancy or property terms say, if anything?",
+          "purpose": "Written terms can affect the options that a local adviser should check."
+        },
+        {
+          "id": "property_response",
+          "label": "Other party's explanation",
+          "question": "Has the other party given a reason or response? If so, what did they say?",
+          "purpose": "The other party's explanation may change the factual assessment."
+        }
+      ],
+      "document_priority": [
+        "request",
+        "notice",
+        "application",
+        "complaint",
+        "reply"
+      ],
+      "subtypes": {
+        "rental_deposit": {
+          "focus": "Review the deposit terms, tenancy end or handover and any stated grounds for withholding money.",
+          "detail_questions": [
+            {
+              "id": "rental_handover",
+              "label": "Move-out or handover",
+              "question": "When did the tenancy end or possession get handed back, if known?",
+              "purpose": "The handover date can clarify the sequence of events."
+            }
+          ]
+        },
+        "eviction": {
+          "detail_questions": [
+            {
+              "id": "property_possession",
+              "label": "Possession status",
+              "question": "Is anyone currently in possession, and has a written demand or court document been received?",
+              "purpose": "A written notice or proceeding may require urgent individual review."
+            }
+          ]
+        },
+        "repairs": {
+          "detail_questions": [
+            {
+              "id": "property_condition",
+              "label": "Condition and reports",
+              "question": "What condition needs attention and when was it reported to the other party?",
+              "purpose": "Helps organize reported conditions and communications."
+            }
+          ]
+        },
+        "ownership": {
+          "detail_questions": [
+            {
+              "id": "property_documents",
+              "label": "Title documents",
+              "question": "Which documents or records support the claimed ownership or interest?",
+              "purpose": "Ownership documents must be professionally checked."
+            }
+          ]
+        }
+      }
+    },
+    "consumer": {
+      "focus": "Review what was ordered or promised, what was delivered, the seller's response and transaction documents.",
+      "records": "Preserve purchase or service records, product or service descriptions, applicable terms, messages and transaction proof.",
+      "contact": "Consider a factual request to the seller or provider describing the issue and requested remedy.",
+      "detail_questions": [
+        {
+          "id": "consumer_purchase",
+          "label": "Goods or services",
+          "question": "What goods or services were purchased and what was promised?",
+          "purpose": "Identifies the actual transaction and representations."
+        },
+        {
+          "id": "consumer_contact",
+          "label": "Seller's response",
+          "question": "What response, if any, has the seller or service provider given?",
+          "purpose": "Documents prior resolution attempts."
+        }
+      ],
+      "document_priority": [
+        "request",
+        "complaint",
+        "application",
+        "notice",
+        "reply"
+      ],
+      "subtypes": {
+        "refund": {
+          "detail_questions": [
+            {
+              "id": "consumer_refund_terms",
+              "label": "Refund terms",
+              "question": "What refund or return terms, if any, did the seller provide?",
+              "purpose": "Terms and promises may need further checking."
+            }
+          ]
+        },
+        "defective_product": {
+          "detail_questions": [
+            {
+              "id": "consumer_condition",
+              "label": "Product condition",
+              "question": "What was defective, and how and when did you discover it?",
+              "purpose": "Helps distinguish reported damage from independently verified evidence."
+            }
+          ]
+        },
+        "delivery": {
+          "detail_questions": [
+            {
+              "id": "consumer_delivery",
+              "label": "Delivery evidence",
+              "question": "What delivery date or status did the seller provide?",
+              "purpose": "Helps clarify delays and relevant records."
+            }
+          ]
+        },
+        "service": {
+          "detail_questions": [
+            {
+              "id": "consumer_service",
+              "label": "Service delivered",
+              "question": "Which part of the service was missing or different from what was promised?",
+              "purpose": "Clarifies the factual service issue."
+            }
+          ]
+        }
+      }
+    },
+    "employment": {
+      "focus": "Review pay or employment terms, period worked, relevant communications and coverage questions before selecting a legal route.",
+      "records": "Keep offer or appointment letters, pay records, attendance or work proof and employer communications.",
+      "contact": "Consider a factual request to the employer or relevant HR contact about the disputed employment matter.",
+      "detail_questions": [
+        {
+          "id": "employment_terms",
+          "label": "Employment terms",
+          "question": "What written employment or pay terms apply, if known?",
+          "purpose": "Contract terms and worker status affect what a professional must review."
+        },
+        {
+          "id": "employment_response",
+          "label": "Employer response",
+          "question": "Have you asked the employer or HR about this? What response did you receive?",
+          "purpose": "Clarifies earlier communication and unresolved points."
+        }
+      ],
+      "document_priority": [
+        "request",
+        "complaint",
+        "application",
+        "notice",
+        "reply"
+      ],
+      "subtypes": {
+        "unpaid_salary": {
+          "detail_questions": [
+            {
+              "id": "employment_period",
+              "label": "Unpaid period",
+              "question": "Which pay period or work dates are affected, if known?",
+              "purpose": "Identifies the period for which money is disputed."
+            }
+          ]
+        },
+        "final_settlement": {
+          "detail_questions": [
+            {
+              "id": "employment_exit",
+              "label": "Employment end",
+              "question": "When did the employment end and what settlement documents, if any, were provided?",
+              "purpose": "Helps organize dates and statements."
+            }
+          ]
+        },
+        "contract_terms": {
+          "detail_questions": [
+            {
+              "id": "employment_change",
+              "label": "Changed terms",
+              "question": "Which specific employment term is disputed and was any change communicated in writing?",
+              "purpose": "Clarifies the reported contractual disagreement."
+            }
+          ]
+        }
+      }
+    },
+    "contract": {
+      "focus": "Review contract terms, alleged performance or delivery, amounts and each party's correspondence.",
+      "records": "Preserve signed terms, invoices, work or delivery records, payment proof and communication history.",
+      "contact": "Consider a factual written request to the contractual counterparty about the unpaid or disputed obligation.",
+      "detail_questions": [
+        {
+          "id": "contract_terms",
+          "label": "Payment or performance terms",
+          "question": "What payment or performance terms are written in the agreement, if any?",
+          "purpose": "Clarifies what the parties report agreeing to."
+        },
+        {
+          "id": "contract_response",
+          "label": "Other party's response",
+          "question": "Has the other party raised objections or explained why they have not performed or paid?",
+          "purpose": "Shows the disputed issues without assuming fault."
+        }
+      ],
+      "document_priority": [
+        "request",
+        "notice",
+        "complaint",
+        "application",
+        "reply"
+      ],
+      "subtypes": {
+        "unpaid_invoice": {
+          "detail_questions": [
+            {
+              "id": "contract_invoice",
+              "label": "Invoice and work",
+              "question": "When was the invoice sent and what work or delivery does it relate to?",
+              "purpose": "Documents the transaction and any claimed payment trigger."
+            }
+          ]
+        },
+        "breach": {
+          "detail_questions": [
+            {
+              "id": "contract_delivery",
+              "label": "Delivery or performance",
+              "question": "What obligation was reportedly not performed, and what evidence shows the agreed terms?",
+              "purpose": "Clarifies the alleged breach without making a legal conclusion."
+            }
+          ]
+        },
+        "advance": {
+          "detail_questions": [
+            {
+              "id": "contract_advance",
+              "label": "Advance terms",
+              "question": "What were the conditions attached to the advance payment, if any?",
+              "purpose": "Helps identify how the payment was described."
+            }
+          ]
+        }
+      }
+    }
+  }
+}

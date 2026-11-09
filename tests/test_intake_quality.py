@@ -200,3 +200,149 @@ def test_unknown_event_date_is_recorded_as_unknown_not_fabricated():
     assert "event_date" in updated["unknown_fields"]
     assert updated["facts"]["event_date"]["value"] == ""
     assert updated["next_question"]["field"] != "event_date"
+
+
+
+def test_ambiguous_yearless_complaint_date_is_not_assigned_to_refusal():
+    initial = build_case(user(BUYER_STORY))
+    question = initial["next_question"]["text"]
+    messages = [
+        *user(BUYER_STORY),
+        {"role": "assistant", "content": question},
+        {"role": "user", "content": "I complaint on October 20 and salary refuse to provide a refund your replacement"},
+    ]
+    case = build_case(messages, asked_fields=["event_date"])
+    assert case["facts"]["event_date"]["value"] == ""
+    assert case["completeness"]["completed"] == 7
+    assert case["date_clarification"]["candidate"] == "20 October"
+    assert case["date_clarification"]["status"] == "different_event"
+    assert "20 October" in case["next_question"]["text"]
+    assert case["next_question"]["text"] != question
+    assert case["facts"]["key_event"]["value"] == "The seller refused to provide a refund or replacement"
+    assert case["narrative"]["text"] == BUYER_STORY
+    assert any(row["date_status"] == "partial" for row in case["timeline"])
+    assert not any(row["date"] == "20 October 2026" for row in case["timeline"])
+
+
+@pytest.mark.parametrize("different_event", [
+    "I complained on 20 October 2026.",
+    "I sent a reminder on 20 October 2026.",
+    "I complained on 20 October 2026 and the seller refused to refund.",
+])
+def test_date_of_separate_action_is_not_assumed_to_date_key_event(different_event):
+    case = build_case([
+        *user(BUYER_STORY),
+        {"role": "assistant", "content": build_case(user(BUYER_STORY))["next_question"]["text"]},
+        {"role": "user", "content": different_event},
+    ], asked_fields=["event_date"])
+    assert case["facts"]["event_date"]["value"] == ""
+    assert case["date_clarification"]["status"] == "different_event"
+
+
+def test_unambiguous_month_first_full_year_answer_is_accepted():
+    initial = build_case(user(BUYER_STORY))
+    case = build_case([
+        *user(BUYER_STORY),
+        {"role": "assistant", "content": initial["next_question"]["text"]},
+        {"role": "user", "content": "October 20, 2026"},
+    ], asked_fields=["event_date"])
+    assert case["facts"]["event_date"]["value"] == "20 October 2026"
+    assert case["completeness"]["completed"] == 8
+    assert case["next_question"]["field"] != "event_date"
+
+
+def test_partial_date_and_year_followup_resolve_without_year_inference():
+    initial = build_case(user(BUYER_STORY))
+    messages = [
+        *user(BUYER_STORY),
+        {"role": "assistant", "content": initial["next_question"]["text"]},
+        {"role": "user", "content": "October 20"},
+    ]
+    intermediate = build_case(messages, asked_fields=["event_date"])
+    assert intermediate["date_clarification"]["status"] == "partial_year"
+    assert intermediate["facts"]["event_date"]["value"] == ""
+    assert "year is not confirmed" in intermediate["next_question"]["text"]
+    messages += [
+        {"role": "assistant", "content": intermediate["next_question"]["text"]},
+        {"role": "user", "content": "2026"},
+    ]
+    final = build_case(messages, asked_fields=["event_date"])
+    assert final["facts"]["event_date"]["value"] == "20 October 2026"
+    assert final["next_question"]["field"] != "event_date"
+    assert "October 20" not in final["narrative"]["text"]
+
+
+def test_complaint_date_confirmed_as_refusal_date_only_after_yes():
+    initial = build_case(user(BUYER_STORY))
+    messages = [
+        *user(BUYER_STORY),
+        {"role": "assistant", "content": initial["next_question"]["text"]},
+        {"role": "user", "content": "I complained on 20 October 2026"},
+    ]
+    intermediate = build_case(messages, asked_fields=["event_date"])
+    assert intermediate["facts"]["event_date"]["value"] == ""
+    assert intermediate["date_clarification"]["status"] == "different_event"
+    messages += [
+        {"role": "assistant", "content": intermediate["next_question"]["text"]},
+        {"role": "user", "content": "Yes"},
+    ]
+    final = build_case(messages, asked_fields=["event_date"])
+    assert final["facts"]["event_date"]["value"] == "20 October 2026"
+    assert final["completeness"]["completed"] == 8
+
+
+def test_two_distinct_dates_in_reply_selects_date_for_matching_action():
+    initial = build_case(user(BUYER_STORY))
+    case = build_case([
+        *user(BUYER_STORY),
+        {"role": "assistant", "content": initial["next_question"]["text"]},
+        {"role": "user", "content": "I complained on 20 October 2026 and the seller refused on 21 October 2026."},
+    ], asked_fields=["event_date"])
+    assert case["facts"]["event_date"]["value"] == "21 October 2026"
+    assert case["facts"]["key_event"]["value"] == "The seller refused to provide a refund or replacement"
+
+
+def test_other_categories_receive_adaptive_yearless_date_clarification():
+    examples = [
+        "My landlord refused to return my security deposit.",
+        "My employer refused to pay my salary.",
+        "My client refused to pay my invoice.",
+    ]
+    for story in examples:
+        initial = build_case(user(story))
+        question = initial["next_question"]
+        # Answering for every category doesn't create an invented year.
+        if question["field"] != "event_date":
+            # The other required facts may be missing; supply them as edits.
+            profile = {"counterparty": "Other party", "location": "Delhi",
+                       "desired_resolution": "Payment requested", "amount": "₹1000"}
+            initial = build_case(user(story), profile=profile)
+            question = initial["next_question"]
+        assert question["field"] == "event_date"
+        answered = build_case([
+            *user(story),
+            {"role": "assistant", "content": question["text"]},
+            {"role": "user", "content": "20 October"},
+        ], profile={"counterparty": "Other party", "location": "Delhi",
+                    "desired_resolution": "Payment requested", "amount": "₹1000"},
+           asked_fields=["event_date"])
+        assert answered["facts"]["event_date"]["value"] == ""
+        assert answered["date_clarification"]["status"] == "partial_year"
+        assert "year" in answered["next_question"]["text"]
+
+
+def test_unknown_answer_after_date_clarification_does_not_loop():
+    initial = build_case(user(BUYER_STORY))
+    messages = [
+        *user(BUYER_STORY),
+        {"role": "assistant", "content": initial["next_question"]["text"]},
+        {"role": "user", "content": "I complained on October 20"},
+    ]
+    intermediate = build_case(messages, asked_fields=["event_date"])
+    messages += [
+        {"role": "assistant", "content": intermediate["next_question"]["text"]},
+        {"role": "user", "content": "not known"},
+    ]
+    final = build_case(messages, asked_fields=["event_date"])
+    assert "event_date" in final["unknown_fields"]
+    assert final["next_question"]["field"] != "event_date"

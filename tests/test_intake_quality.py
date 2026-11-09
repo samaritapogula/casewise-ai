@@ -368,7 +368,7 @@ def test_context_only_answer_not_appended_to_narrative_or_every_draft():
     assert context["consumer_refund_terms"]["answer"] == "did not provide any"
     assert len(case["timeline"]) == 4
     assert [row["date"] for row in case["timeline"]] == [
-        "10 October 2026", "18 October 2026", "21 October 2026", "20 October 2026",
+        "10 October 2026", "18 October 2026", "20 October 2026", "21 October 2026",
     ]
     refusal_rows = [row for row in case["timeline"] if "refused" in row["event"].lower()]
     assert len(refusal_rows) == 1

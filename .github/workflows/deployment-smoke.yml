@@ -1,0 +1,34 @@
+name: Full-stack Docker deployment smoke
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production container
+        run: docker build -t casewise-fullstack .
+      - name: Start server
+        run: docker run -d --name casewise-smoke -p 10000:10000 -e PORT=10000 casewise-fullstack
+      - name: Verify public homepage and backend API
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:10000/api/health > /tmp/casewise-health.json; then
+              break
+            fi
+            sleep 2
+          done
+          cat /tmp/casewise-health.json
+          grep -q '"status":"ok"' /tmp/casewise-health.json
+          curl -fsS http://127.0.0.1:10000/ > /tmp/casewise-index.html
+          grep -q 'CaseWise AI' /tmp/casewise-index.html
+          curl -fsS http://127.0.0.1:10000/api/sources > /tmp/casewise-sources.json
+          grep -q '"sources"' /tmp/casewise-sources.json
+      - name: Show logs if deployment check fails
+        if: failure()
+        run: docker logs casewise-smoke || true

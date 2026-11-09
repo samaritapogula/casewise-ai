@@ -3,6 +3,7 @@ import { createContinuousSpeech } from './continuousSpeech';
 import CaseFilePanel from './CaseFilePanel';
 import LegalPlanPanel from './LegalPlanPanel';
 import DocumentChooser, { documentTypes } from './DocumentChooser';
+import DocumentExtraFields from './DocumentExtraFields';
 import {
   ArrowRight, BookOpen, CheckCircle2, ChevronRight, CircleHelp, ClipboardList,
   Download, ExternalLink, FileDown, FileText, Info, Landmark, LoaderCircle,
@@ -68,6 +69,8 @@ export default function App() {
   const [draftFacts, setDraftFacts] = useState('');
   const [draftConfirmed, setDraftConfirmed] = useState(false);
   const [reviewError, setReviewError] = useState('');
+  const [draftPreview, setDraftPreview] = useState('');
+  const [previewBusy, setPreviewBusy] = useState(false);
   const bottom = useRef(null);
   const textarea = useRef(null);
   const [caseCorrections, setCaseCorrections] = useState({});
@@ -86,6 +89,7 @@ export default function App() {
   const [planError, setPlanError] = useState('');
   const caseId = useRef('CW-' + Math.random().toString(36).slice(2, 11).toUpperCase());
   const sentMessages = messages.filter(m => m.role === 'user');
+  useEffect(() => { setDraftPreview(''); }, [draftProfile, draftFacts, documentType]);
 
   function casePayload(nextMessages = messages, other = {}) {
     return {
@@ -320,14 +324,32 @@ export default function App() {
     const corrected = Object.fromEntries(fieldConfig.map(([key]) => [
       key, profile[key]?.trim() || caseFacts[key]?.value || autoFields[key] || '',
     ]));
-    setDraftProfile({ ...emptyProfile, ...autoFields, ...corrected, sender_name: '', sender_contact: '', recipient_name: '' });
+    setDraftProfile({ ...emptyProfile, ...autoFields, ...corrected, sender_name: '', sender_contact: '', recipient_name: '', prior_contact: '', office_action: '', received_communication: '', reply_points: '', assistance_requested: '' });
     setDraftFacts(caseStory.trim() || analysis.case_file?.narrative?.text || analysis.summary.draft_facts || '');
     setDraftConfirmed(false);
     setReviewError('');
+    setDraftPreview('');
     setReviewOpen(true);
   }
   const essentialFields = ['counterparty', 'location', 'event_date', 'desired_resolution'];
   const draftMissing = essentialFields.filter(key => !draftProfile[key]?.trim());
+
+  async function previewDraft() {
+    if (!sentMessages.length || previewBusy || downloading || analysis?.needs_lawyer || !draftConfirmed || draftMissing.length || !draftFacts.trim()) return;
+    setPreviewBusy(true); setReviewError('');
+    try {
+      const response = await fetch(`${API_BASE}/api/draft-preview`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ messages, category,
+          profile: {...draftProfile, facts_narrative:draftFacts},
+          confirmed:true, document_type:documentType }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail || 'Could not preview this draft.');
+      setDraftPreview(result.draft || '');
+    } catch(err) { setReviewError(err.message || 'Could not preview this draft.'); }
+    finally { setPreviewBusy(false); }
+  }
 
   async function downloadDraft() {
     if (!sentMessages.length || downloading || analysis?.needs_lawyer || !draftConfirmed || draftMissing.length || !draftFacts.trim()) return;
@@ -448,11 +470,21 @@ export default function App() {
             <label className="review-label">Intended recipient / authority (optional)<input value={draftProfile.recipient_name || ''} maxLength={180} placeholder={documentType === 'complaint' || documentType === 'application' ? 'e.g. relevant office or organization' : 'e.g. person or business'} onChange={e => {setDraftProfile(p=>({...p,recipient_name:e.target.value}));setDraftConfirmed(false);}}/><small>For complaints and applications, verify the appropriate office before submitting. Leave blank for a placeholder.</small></label>
             {[['sender_name','Your name (optional)'],['sender_contact','Your contact details (optional)']].map(([key,label]) => <label className="review-label" key={key}>{label}<input value={draftProfile[key] || ''} maxLength={180} placeholder="Leave blank to use a placeholder" onChange={e => { setDraftProfile(p => ({ ...p, [key]: e.target.value })); setDraftConfirmed(false); }}/></label>)}
           </div>
+          <DocumentExtraFields type={documentType} values={draftProfile}
+            onChange={(key,value)=>{setDraftProfile(prev=>({...prev,[key]:value}));setDraftConfirmed(false);}}/>
           {draftMissing.length > 0 && <p className="review-alert"><ShieldAlert size={16}/> Complete {draftMissing.map(key => fieldConfig.find(([k]) => k === key)?.[1]).join(', ')} before generating. If a date is genuinely unknown, write “Not known” rather than guessing.</p>}
           <label className="review-confirm"><input type="checkbox" checked={draftConfirmed} onChange={e => setDraftConfirmed(e.target.checked)}/> <span>I have reviewed the narrative and confirmed the details I supplied. I understand this is a preliminary draft, not an official filing, and must be checked before use.</span></label>
+          {draftPreview && <section className="draft-preview-panel" aria-label="Generated draft preview">
+            <div><strong>Generated {documentTypes.find(d=>d.value===documentType)?.label || 'document'} — text preview</strong><small>Read this draft carefully. Change the facts above and regenerate if needed.</small></div>
+            <pre>{draftPreview}</pre>
+          </section>}
           {reviewError && <p className="review-alert" role="alert">{reviewError}</p>}
         </div>
-        <div className="review-actions"><button type="button" className="review-cancel" onClick={() => setReviewOpen(false)} disabled={downloading}>Cancel</button><button type="button" className="review-download" onClick={downloadDraft} disabled={downloading || !draftConfirmed || draftMissing.length > 0 || !draftFacts.trim()}>{downloading ? <LoaderCircle size={16} className="spin"/> : <Download size={16}/>} Generate reviewed PDF</button></div>
+        <div className="review-actions">
+          <button type="button" className="review-cancel" onClick={() => setReviewOpen(false)} disabled={downloading}>Cancel</button>
+          <button type="button" className="review-preview" onClick={previewDraft} disabled={previewBusy || downloading || !draftConfirmed || draftMissing.length > 0 || !draftFacts.trim()}>{previewBusy ? <LoaderCircle size={16} className="spin"/> : <FileText size={16}/>} Generate text preview</button>
+          <button type="button" className="review-download" onClick={downloadDraft} disabled={downloading || previewBusy || !draftConfirmed || draftMissing.length > 0 || !draftFacts.trim()}>{downloading ? <LoaderCircle size={16} className="spin"/> : <Download size={16}/>} Download {documentTypes.find(d=>d.value===documentType)?.label || 'draft'} PDF</button>
+        </div>
       </section>
     </div>}
     <footer className="site-footer"><span>© 2026 CaseWise AI · Built as an explainable civil-guidance prototype</span><span>Not legal advice · India-focused</span></footer>

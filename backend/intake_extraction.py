@@ -77,7 +77,7 @@ _STATES = (
 _STATE_NAMES = "|".join(re.escape(name) for name in sorted(_STATES, key=len, reverse=True))
 _CITY = r"[A-Z][A-Za-z'’-]+(?:\s+[A-Z][A-Za-z'’-]+){0,3}"
 _LOCATION_PAIR = re.compile(
-    rf"(?i:\b(?:in|at|located\s+in|based\s+in|place\s*[:]\s*))"
+    rf"(?i:\b(?:in|at|located\s+in|based\s+in|place\s*:))\s+"
     rf"(?P<city>{_CITY})\s*,\s*(?P<state>{_STATE_NAMES})\b",
     re.I,
 )

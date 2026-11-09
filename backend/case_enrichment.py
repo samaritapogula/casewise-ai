@@ -117,8 +117,29 @@ def structured_facts_summary(category_label: str, subtype_label: str,
     # This text is a structured collection of *reported facts*, not an
     # unreviewed paraphrase claiming that a legal case was established.
     text = " | ".join(f"{item['label']}: {item['value']}" for item in items)
+    values = {item["key"]: item["value"] for item in items}
+    narrative = ["The user reports an issue categorized as " + values["category"] + "."]
+    ordered = (
+        ("user_role", "Reported role"),
+        ("counterparty", "Other party"),
+        ("location", "Reported location"),
+        ("key_event", "Reported event"),
+        ("event_date", "Reported relevant date"),
+        ("amount", "Reported disputed amount"),
+        ("desired_resolution", "Requested outcome"),
+        ("evidence", "User-mentioned supporting material (not independently checked)"),
+    )
+    for key, label in ordered:
+        if values.get(key):
+            narrative.append(label + ": " + values[key].rstrip(" .") + ".")
+    for item in items:
+        if item["key"].startswith("context:"):
+            narrative.append("Additional reported detail (" + item["label"] + "): "
+                             + item["value"].rstrip(" .") + ".")
+    narrative.append("These statements are user-reported and have not been independently verified.")
     return {
         "items": items,
+        "narrative": " ".join(narrative)[:3200],
         "text": text[:3200],
         "status": "compiled_from_reported_fields",
         "disclaimer": "Compiled from user-provided statements; completeness does not verify accuracy or legal merit.",

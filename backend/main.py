@@ -45,6 +45,7 @@ class Request(BaseModel):
     confirmed: bool = False  # Explicit user review, required for document drafting.
     case_id: str = Field(default="", max_length=48)
     case_overrides: dict[str, str] = Field(default_factory=dict)
+    context_overrides: dict[str, str] = Field(default_factory=dict, max_length=12)
     timeline_edits: list[dict[str, Any]] | None = Field(default=None, max_length=14)
     evidence_edits: list[dict[str, Any]] | None = Field(default=None, max_length=18)
     asked_fields: list[str] = Field(default_factory=list, max_length=16)
@@ -79,6 +80,7 @@ def build_case_from_request(request: Request, ai: dict | None = None) -> dict:
     return build_case(
         as_dict(request), request.profile, request.category, ai,
         case_overrides=request.case_overrides,
+        context_overrides=request.context_overrides,
         timeline_edits=request.timeline_edits,
         evidence_edits=request.evidence_edits,
         asked_fields=request.asked_fields,
@@ -106,6 +108,7 @@ def analyze_case(request: Request):
         case = build_case(
             as_dict(request), request.profile, chosen, proposed,
             case_overrides=request.case_overrides,
+            context_overrides=request.context_overrides,
             timeline_edits=request.timeline_edits,
             evidence_edits=request.evidence_edits,
             asked_fields=request.asked_fields,
